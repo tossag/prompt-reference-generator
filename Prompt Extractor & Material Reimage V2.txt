@@ -1,0 +1,2979 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Realism Style Extractor & Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <!-- Cropper.js for Texture Lightbox in Re-Imager -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
+    
+    <style>
+        /* Custom scrollbars */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #404040; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #525252; }
+        
+        .hidden-important { display: none !important; }
+        .cursor-zoom-in { cursor: zoom-in; }
+        
+        /* Zoom Focus Animation */
+        @keyframes zoomInFocus {
+            0% { opacity: 0; transform: scale(0.9); filter: blur(8px); }
+            100% { opacity: 1; transform: scale(1); filter: blur(0); }
+        }
+        .animate-zoom-focus {
+            animation: zoomInFocus 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        .material-row { transition: all 0.2s ease; }
+        .material-row.highlighted { border-color: #3b82f6; box-shadow: 0 0 10px rgba(59,130,246,0.3); background-color: rgba(31, 41, 55, 1); }
+        
+        /* Custom checkbox style */
+        .toggle-checkbox {
+            appearance: none;
+            width: 14px;
+            height: 14px;
+            border-radius: 3px;
+            border: 1px solid #4b5563;
+            background-color: #1f2937;
+            cursor: pointer;
+            display: grid;
+            place-content: center;
+        }
+        .toggle-checkbox::before {
+            content: "";
+            width: 8px;
+            height: 8px;
+            border-radius: 1px;
+            transform: scale(0);
+            transition: 120ms transform ease-in-out;
+            box-shadow: inset 1em 1em #3b82f6;
+        }
+        .toggle-checkbox:checked::before {
+            transform: scale(1);
+        }
+
+        /* Hide radio buttons for custom toolbars */
+        .tool-radio:checked + label {
+            background-color: #2563eb;
+            color: white;
+            border-color: #3b82f6;
+        }
+    </style>
+</head>
+<body class="bg-black text-neutral-100 font-sans min-h-screen p-4 md:p-8">
+
+    <div class="max-w-[1400px] mx-auto space-y-8">
+        
+        <!-- Header -->
+        <div class="text-center space-y-3 animate-zoom-focus">
+            <div class="inline-flex items-center justify-center p-3 bg-blue-900/30 rounded-full mb-2 hover:scale-110 transition-transform duration-300">
+                <i data-lucide="sparkles" class="w-8 h-8 text-blue-400"></i>
+            </div>
+            <h1 class="text-3xl md:text-4xl font-bold tracking-tight text-neutral-100">
+                Prompt Transfer AI
+            </h1>
+        </div>
+
+        <div class="grid lg:grid-cols-2 gap-8">
+            
+            <!-- Left Column - Inputs -->
+            <div class="space-y-6">
+                
+                <!-- Image Upload Grid -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    
+                    <!-- Original Image Box -->
+                    <div class="bg-neutral-900 p-4 rounded-2xl shadow-sm border border-neutral-800 flex flex-col h-full">
+                        <h2 class="text-sm font-semibold mb-3 flex items-center gap-2 text-neutral-200">
+                            <i data-lucide="image" class="w-4 h-4 text-blue-400"></i>
+                            1. Original Image (To Enhance)
+                        </h2>
+                        <div id="upload-zone-orig" class="flex-grow border-2 border-dashed border-neutral-700 rounded-xl p-4 text-center hover:bg-neutral-800/50 transition-colors cursor-pointer relative overflow-hidden group min-h-[200px] flex items-center justify-center">
+                            <input type="file" id="file-input-orig" accept="image/*" class="hidden" />
+                            
+                            <div id="preview-container-orig" class="hidden-important w-full flex items-center justify-center bg-black/50 absolute inset-0">
+                                <img id="preview-image-orig" src="" alt="Original" class="w-full h-full object-contain" />
+                                <div class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                    <span class="text-white text-sm font-medium bg-black/60 px-3 py-1.5 rounded-lg backdrop-blur-sm">Change</span>
+                                </div>
+                            </div>
+
+                            <div id="placeholder-orig" class="space-y-2 pointer-events-none">
+                                <div class="w-12 h-12 bg-blue-900/20 rounded-full flex items-center justify-center mx-auto">
+                                    <i data-lucide="upload" class="w-6 h-6 text-blue-400"></i>
+                                </div>
+                                <div>
+                                    <p class="text-neutral-300 text-sm font-medium">Click or paste</p>
+                                    <p class="text-neutral-500 text-xs mt-1">CGI or Low-res</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Reference Image Box -->
+                    <div class="bg-neutral-900 p-4 rounded-2xl shadow-sm border border-neutral-800 flex flex-col h-full">
+                        <h2 class="text-sm font-semibold mb-3 flex items-center gap-2 text-neutral-200">
+                            <i data-lucide="camera" class="w-4 h-4 text-amber-400"></i>
+                            2. Reference Image (Style)
+                        </h2>
+                        <div id="upload-zone-ref" class="flex-grow border-2 border-dashed border-neutral-700 rounded-xl p-4 text-center hover:bg-neutral-800/50 transition-colors cursor-pointer relative overflow-hidden group min-h-[200px] flex items-center justify-center">
+                            <input type="file" id="file-input-ref" accept="image/*" class="hidden" />
+                            
+                            <div id="preview-container-ref" class="hidden-important w-full flex items-center justify-center bg-black/50 absolute inset-0">
+                                <img id="preview-image-ref" src="" alt="Reference" class="w-full h-full object-contain" />
+                                <div class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                    <span class="text-white text-sm font-medium bg-black/60 px-3 py-1.5 rounded-lg backdrop-blur-sm">Change</span>
+                                </div>
+                            </div>
+
+                            <div id="placeholder-ref" class="space-y-2 pointer-events-none">
+                                <div class="w-12 h-12 bg-amber-900/20 rounded-full flex items-center justify-center mx-auto">
+                                    <i data-lucide="upload" class="w-6 h-6 text-amber-400"></i>
+                                </div>
+                                <div>
+                                    <p class="text-neutral-300 text-sm font-medium">Click or paste</p>
+                                    <p class="text-neutral-500 text-xs mt-1">Photoreal style</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Error Alert -->
+                <div id="error-container" class="hidden-important p-4 bg-red-950/30 text-red-400 rounded-lg text-sm flex items-start gap-2 border border-red-900/50">
+                    <i data-lucide="alert-circle" class="w-5 h-5 shrink-0 mt-0.5"></i>
+                    <p id="error-text"></p>
+                </div>
+
+                <!-- Focus Areas Selection -->
+                <div class="p-5 bg-neutral-900 rounded-2xl border border-neutral-800">
+                    <h3 class="text-sm font-medium text-neutral-300 mb-3 flex items-center gap-2">
+                        <i data-lucide="target" class="w-4 h-4 text-blue-400"></i>
+                        3. Focus Areas to Transfer
+                    </h3>
+                    <div id="focus-options" class="flex flex-wrap gap-2">
+                        <!-- JS will populate chips here -->
+                    </div>
+                    <div class="flex gap-2 mt-3">
+                        <input type="text" id="custom-focus-input" class="flex-grow bg-black border border-neutral-700 rounded-xl px-3 py-2 text-sm text-neutral-300 placeholder-neutral-600 focus:outline-none focus:border-blue-500 transition-colors" placeholder="Type custom focus (e.g. Skin Pores, Lens Flare)...">
+                        <button id="add-focus-btn" class="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-medium rounded-xl text-sm border border-neutral-700 transition-colors flex items-center gap-2">
+                            <i data-lucide="plus" class="w-4 h-4"></i> Add
+                        </button>
+                    </div>
+                    <p class="text-xs text-neutral-500 mt-3">Select elements to actively transfer from Reference to Original. Leave blank to let AI balance it.</p>
+                </div>
+
+                <!-- Custom Negative Prompt -->
+                <div class="p-5 bg-neutral-900 rounded-2xl border border-neutral-800">
+                    <h3 class="text-sm font-medium text-neutral-300 mb-3 flex items-center gap-2">
+                        <i data-lucide="minus-circle" class="w-4 h-4 text-red-400"></i>
+                        4. Custom Negative Constraints
+                    </h3>
+                    <textarea id="custom-negative-input" rows="2" class="w-full bg-black border border-neutral-700 rounded-xl p-3 text-sm text-neutral-300 placeholder-neutral-600 focus:outline-none focus:border-blue-500 transition-colors resize-none" placeholder="e.g. text, watermarks, cartoon, ugly, deformed..."></textarea>
+                    <p class="text-xs text-neutral-500 mt-2">Things to explicitly avoid in the final result (Optional).</p>
+                </div>
+
+                <!-- Output Dimensions Selection -->
+                <div class="p-5 bg-neutral-900 rounded-2xl border border-neutral-800">
+                    <h3 class="text-sm font-medium text-neutral-300 mb-4 flex items-center gap-2">
+                        <i data-lucide="frame" class="w-4 h-4 text-purple-400"></i>
+                        5. Output Dimensions
+                    </h3>
+                    
+                    <div class="flex items-center overflow-x-auto pb-1">
+                        <!-- Segmented Control Bar -->
+                        <div class="inline-flex items-center bg-black border border-neutral-800 rounded-xl p-1 whitespace-nowrap">
+                            <button type="button" class="aspect-btn active-aspect px-4 py-2 rounded-lg text-sm font-medium bg-neutral-800 text-neutral-200 shadow-sm transition-all" data-aspect="original">Original</button>
+                            <div class="w-px h-4 bg-neutral-800 mx-1"></div>
+                            <button type="button" class="aspect-btn px-4 py-2 rounded-lg text-sm font-medium text-neutral-500 hover:text-neutral-300 transition-all" data-aspect="16:9">16:9</button>
+                            <div class="w-px h-4 bg-neutral-800 mx-1"></div>
+                            <button type="button" class="aspect-btn px-4 py-2 rounded-lg text-sm font-medium text-neutral-500 hover:text-neutral-300 transition-all" data-aspect="9:16">9:16</button>
+                            <div class="w-px h-4 bg-neutral-800 mx-1"></div>
+                            <button type="button" class="aspect-btn px-4 py-2 rounded-lg text-sm font-medium text-neutral-500 hover:text-neutral-300 transition-all" data-aspect="3:2">3:2</button>
+                            <div class="w-px h-4 bg-neutral-800 mx-1"></div>
+                            <button type="button" class="aspect-btn px-4 py-2 rounded-lg text-sm font-medium text-neutral-500 hover:text-neutral-300 transition-all" data-aspect="2:3">2:3</button>
+                            <div class="w-px h-4 bg-neutral-800 mx-1"></div>
+                            <button type="button" class="aspect-btn px-4 py-2 rounded-lg text-sm font-medium text-neutral-500 hover:text-neutral-300 transition-all" data-aspect="4:3">4:3</button>
+                            <div class="w-px h-4 bg-neutral-800 mx-1"></div>
+                            <button type="button" class="aspect-btn px-4 py-2 rounded-lg text-sm font-medium text-neutral-500 hover:text-neutral-300 transition-all" data-aspect="3:4">3:4</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Generate & Reset Buttons -->
+                <div class="space-y-3">
+                    <button id="generate-btn" class="w-full py-4 px-4 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all shadow-sm bg-neutral-800 text-neutral-500 cursor-not-allowed">
+                        <i data-lucide="wand-2" id="btn-icon-sparkles" class="w-5 h-5"></i>
+                        <i data-lucide="loader-2" id="btn-icon-loader" class="w-5 h-5 animate-spin hidden-important"></i>
+                        <span id="btn-text">Generate Enhanced Image</span>
+                    </button>
+                    
+                    <button id="reset-btn" class="w-full py-3 px-4 rounded-xl font-medium flex items-center justify-center gap-2 transition-all border border-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-800">
+                        <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                        Start Over
+                    </button>
+                </div>
+            </div>
+
+            <!-- Right Column - Output -->
+            <div class="bg-neutral-900 p-6 rounded-2xl shadow-sm border border-neutral-800 flex flex-col h-full space-y-4">
+                
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-xl font-semibold flex items-center gap-2 text-neutral-200">
+                        <i data-lucide="image-down" class="w-5 h-5 text-green-400"></i>
+                        Generated Result
+                    </h2>
+                    
+                    <div class="flex items-center gap-2">
+                        <button id="save-session-btn" class="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-lg text-xs font-medium transition-colors border border-neutral-700" title="Save prompt and JSON to a notepad file">
+                            <i data-lucide="save" class="w-3.5 h-3.5"></i> Save Session
+                        </button>
+                        <button id="load-session-btn" class="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-lg text-xs font-medium transition-colors border border-neutral-700" title="Load prompt and JSON from a notepad file">
+                            <i data-lucide="upload" class="w-3.5 h-3.5"></i> Load Session
+                        </button>
+                        <input type="file" id="load-session-input" accept=".txt,.json" class="hidden-important" />
+                    </div>
+                </div>
+
+                <div class="space-y-2">
+                    <!-- Image Output Area -->
+                    <div class="w-full bg-black rounded-xl border border-neutral-800 relative overflow-hidden group min-h-[300px] flex items-center justify-center">
+                        
+                        <!-- Empty Output State -->
+                        <div id="output-empty" class="flex flex-col items-center justify-center text-neutral-500 p-8 text-center space-y-4">
+                            <div class="w-16 h-16 bg-neutral-800 rounded-full flex items-center justify-center">
+                                <i data-lucide="wand-2" class="w-8 h-8 text-neutral-600"></i>
+                            </div>
+                            <p>Upload both images and click generate to see the AI magic.</p>
+                        </div>
+
+                        <!-- Loading State -->
+                        <div id="output-loading" class="hidden-important flex flex-col items-center justify-center text-blue-400 p-8 text-center space-y-4 absolute inset-0 bg-black/80 backdrop-blur-sm z-10">
+                            <i data-lucide="loader-2" class="w-12 h-12 animate-spin"></i>
+                            <p id="loading-status-text" class="text-sm font-medium">Extracting prompt elements...</p>
+                        </div>
+
+                        <!-- Generated Image Container -->
+                        <img id="generated-image" src="" alt="Generated Result" class="hidden-important w-full h-full max-h-[500px] object-contain transition-transform hover:scale-[1.02] cursor-zoom-in" title="Click to enlarge" />
+                    </div>
+                    
+                    <!-- Cohesive Action Toolbar -->
+                    <div id="result-actions" class="hidden-important flex flex-col sm:flex-row gap-3 w-full pt-2">
+                        <button id="action-compare-btn" class="flex-1 py-3 px-4 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-medium text-sm transition-all flex items-center justify-center gap-2 shadow-lg active:scale-[0.98]">
+                            <i data-lucide="split" class="w-4 h-4"></i> Compare & Open Lightbox
+                        </button>
+                        <button id="action-reimage-btn" class="flex-1 py-3 px-4 bg-purple-600 hover:bg-purple-500 text-white rounded-xl font-medium text-sm transition-all flex items-center justify-center gap-2 shadow-lg active:scale-[0.98]" title="Map custom textures onto your layout">
+                            <i data-lucide="layers" class="w-4 h-4"></i> Launch Material Re-Imager
+                        </button>
+                    </div>
+
+                    <p class="text-xs text-neutral-500 text-right pr-2">
+                        Powered by <span class="font-mono text-neutral-400">gemini-2.5-flash-image-preview</span>
+                    </p>
+                </div>
+
+                <!-- Generated Prompt Section -->
+                <div class="flex-grow flex flex-col space-y-4">
+                    
+                    <!-- Text Prompt Box -->
+                    <div class="flex flex-col">
+                        <div class="flex items-center justify-between mb-2">
+                            <div class="flex items-center gap-2 sm:gap-3 flex-wrap">
+                                <h3 class="text-sm font-semibold text-neutral-400">Extracted Prompt <span class="text-xs font-normal text-neutral-500 ml-1">(Editable)</span></h3>
+                                
+                                <!-- Use Prompt Toggle -->
+                                <label for="use-prompt-toggle" class="relative inline-flex items-center cursor-pointer shrink-0" title="Include this text prompt when generating the image">
+                                    <input type="checkbox" id="use-prompt-toggle" class="sr-only peer" checked>
+                                    <div class="relative w-9 h-5 bg-neutral-800 border border-neutral-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[1px] after:left-[2px] after:bg-neutral-400 after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600 peer-checked:border-emerald-600 peer-checked:after:bg-white"></div>
+                                    <span class="ml-2 text-xs font-medium text-neutral-500 peer-checked:text-emerald-400 transition-colors whitespace-nowrap flex items-center gap-1">
+                                        <span id="prompt-use-on" class="flex items-center gap-1"><i data-lucide="check-circle" class="w-3 h-3"></i> Include in Gen</span>
+                                        <span id="prompt-use-off" class="flex items-center gap-1 hidden-important"><i data-lucide="x-circle" class="w-3 h-3"></i> Exclude</span>
+                                    </span>
+                                </label>
+
+                                <!-- Lock Prompt Toggle -->
+                                <label for="lock-prompt-toggle" class="relative inline-flex items-center cursor-pointer shrink-0" title="Skip extraction phase, use existing text prompt below">
+                                    <input type="checkbox" id="lock-prompt-toggle" class="sr-only peer">
+                                    <div class="relative w-9 h-5 bg-neutral-800 border border-neutral-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[1px] after:left-[2px] after:bg-neutral-400 after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600 peer-checked:border-blue-600 peer-checked:after:bg-white"></div>
+                                    <span class="ml-2 text-xs font-medium text-neutral-500 peer-checked:text-blue-400 transition-colors whitespace-nowrap flex items-center gap-1"><i data-lucide="lock" class="w-3 h-3"></i> Lock</span>
+                                </label>
+                            </div>
+
+                            <button id="copy-btn" class="hidden-important flex items-center gap-1.5 px-3 py-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-lg text-xs font-medium transition-colors border border-neutral-700">
+                                <i data-lucide="copy" id="copy-icon" class="w-3 h-3"></i>
+                                <i data-lucide="check" id="check-icon" class="w-3 h-3 text-green-400 hidden-important"></i>
+                                <span id="copy-text">Copy Prompt</span>
+                            </button>
+                        </div>
+                        <div id="output-content" contenteditable="true" spellcheck="false" class="p-4 bg-black rounded-xl border border-neutral-800 overflow-y-auto font-mono text-xs leading-relaxed text-neutral-300 whitespace-pre-wrap min-h-[100px] max-h-[200px] focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors cursor-text">
+                            Waiting for generation...
+                        </div>
+                    </div>
+
+                    <!-- Raw JSON Box -->
+                    <div class="flex flex-col">
+                        <div class="flex items-center justify-between mb-2">
+                            <div class="flex items-center gap-2 sm:gap-3 flex-wrap">
+                                <h3 class="text-sm font-semibold text-neutral-400 flex items-center gap-2">
+                                    <i data-lucide="code" class="w-4 h-4 text-blue-400"></i>
+                                    Raw JSON <span class="text-xs font-normal text-neutral-500">(Editable)</span>
+                                </h3>
+
+                                <!-- Use JSON Toggle -->
+                                <label for="use-json-toggle" class="relative inline-flex items-center cursor-pointer shrink-0" title="Include this JSON analysis when generating the image">
+                                    <input type="checkbox" id="use-json-toggle" class="sr-only peer" checked>
+                                    <div class="relative w-9 h-5 bg-neutral-800 border border-neutral-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[1px] after:left-[2px] after:bg-neutral-400 after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600 peer-checked:border-emerald-600 peer-checked:after:bg-white"></div>
+                                    <span class="ml-2 text-xs font-medium text-neutral-500 peer-checked:text-emerald-400 transition-colors whitespace-nowrap flex items-center gap-1">
+                                        <span id="json-use-on" class="flex items-center gap-1"><i data-lucide="check-circle" class="w-3 h-3"></i> Include in Gen</span>
+                                        <span id="json-use-off" class="flex items-center gap-1 hidden-important"><i data-lucide="x-circle" class="w-3 h-3"></i> Exclude</span>
+                                    </span>
+                                </label>
+                                
+                                <!-- Lock JSON Toggle -->
+                                <label for="lock-json-toggle" class="relative inline-flex items-center cursor-pointer shrink-0" title="Lock JSON and rebuild prompt from it">
+                                    <input type="checkbox" id="lock-json-toggle" class="sr-only peer">
+                                    <div class="relative w-9 h-5 bg-neutral-800 border border-neutral-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[1px] after:left-[2px] after:bg-neutral-400 after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-600 peer-checked:border-amber-600 peer-checked:after:bg-white"></div>
+                                    <span class="ml-2 text-xs font-medium text-neutral-500 peer-checked:text-amber-400 transition-colors whitespace-nowrap flex items-center gap-1"><i data-lucide="lock" class="w-3 h-3"></i> Lock</span>
+                                </label>
+                            </div>
+                            
+                            <button id="copy-json-btn" class="hidden-important flex items-center gap-1.5 px-3 py-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-lg text-xs font-medium transition-colors border border-neutral-700">
+                                <i data-lucide="copy" id="copy-json-icon" class="w-3 h-3"></i>
+                                <i data-lucide="check" id="check-json-icon" class="w-3 h-3 text-green-400 hidden-important"></i>
+                                <span id="copy-json-text">Copy JSON</span>
+                            </button>
+                        </div>
+                        <div id="json-output-content" contenteditable="true" spellcheck="false" class="p-4 bg-black rounded-xl border border-neutral-800 overflow-y-auto font-mono text-xs leading-relaxed text-blue-400/80 whitespace-pre-wrap min-h-[100px] max-h-[200px] focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50 transition-colors cursor-text">
+                            Waiting for analysis...
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Zoom Modal / Compare Lightbox (Fixed styling with hidden-important) -->
+    <div id="zoom-modal" class="fixed inset-0 z-[100] hidden-important bg-black/95 backdrop-blur-sm flex items-center justify-center">
+        <div class="absolute top-4 right-4 z-50 flex gap-3">
+            <button id="modal-launch-reimager-btn" class="p-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-colors border border-purple-500 shadow-lg flex items-center gap-1.5 px-3 text-xs font-semibold" title="Launch Material Re-Imager with this Image">
+                <i data-lucide="layers" class="w-4 h-4"></i> Launch Re-Imager
+            </button>
+            <button id="modal-open-tab-btn" class="p-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-lg transition-colors border border-neutral-700 shadow-lg" title="Open in New Tab">
+                <i data-lucide="external-link" class="w-5 h-5"></i>
+            </button>
+            <button id="modal-close-btn" class="p-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-lg transition-colors border border-neutral-700 shadow-lg" title="Close">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+        
+        <!-- Compare Slider Control -->
+        <div id="compare-control" class="absolute bottom-20 left-1/2 -translate-x-1/2 flex items-center gap-4 bg-neutral-900/90 px-5 py-3 rounded-full backdrop-blur-md z-50 border border-neutral-800 shadow-xl">
+            <span class="text-xs text-neutral-400 font-medium w-12 text-right">Original</span>
+            <input type="range" id="compare-slider" min="0" max="100" value="100" class="w-48 sm:w-64 cursor-pointer accent-blue-500" />
+            <span class="text-xs text-blue-400 font-medium w-12">Result</span>
+        </div>
+
+        <div class="absolute bottom-6 left-1/2 -translate-x-1/2 px-4 py-2 bg-neutral-900/80 rounded-full text-neutral-400 text-xs flex items-center gap-2 pointer-events-none shadow-lg border border-neutral-800 z-50">
+            <i data-lucide="mouse" class="w-4 h-4"></i>
+            Scroll to zoom, drag to pan
+        </div>
+        
+        <div id="modal-trackpad" class="w-full h-full flex items-center justify-center overflow-hidden cursor-grab active:cursor-grabbing">
+            <div id="modal-image-container" class="relative transition-transform origin-center select-none pointer-events-none flex items-center justify-center" style="transform: scale(1) translate(0px, 0px);">
+                <!-- Original Image (Bottom Layer) -->
+                <img id="modal-image-orig" src="" class="max-w-[90vw] max-h-[90vh] object-contain block pointer-events-none" />
+                <!-- Generated Image (Top Layer) -->
+                <img id="modal-image-gen" src="" class="absolute top-0 left-0 w-full h-full object-contain block pointer-events-none" style="clip-path: inset(0 0 0 0);" />
+                <!-- Compare Line Overlay -->
+                <div id="compare-line" class="absolute top-0 bottom-0 w-[2px] bg-white hidden-important pointer-events-none" style="left: 100%; box-shadow: 0 0 5px rgba(0,0,0,0.8);"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== IMAGE ⇄ JSON RE-IMAGER WORKSPACE (Fixed styling with hidden-important) ==================== -->
+    <div id="reimager-modal" class="fixed inset-0 z-[120] hidden-important bg-black overflow-y-auto p-4 md:p-8 flex-col space-y-6">
+        <!-- Re-imager Header -->
+        <div class="flex items-center justify-between border-b border-neutral-800 pb-4">
+            <div class="flex items-center space-x-3">
+                <i data-lucide="layers" class="w-8 h-8 text-purple-400 animate-pulse"></i>
+                <div>
+                    <h1 class="text-xl font-bold text-white">Image ⇄ JSON Re-imager Workspace</h1>
+                    <p class="text-xs text-neutral-400">Map custom textures and redesign materials onto your generated layout</p>
+                </div>
+            </div>
+            <button id="reimager-close-btn" class="p-2 bg-neutral-900 hover:bg-neutral-800 text-neutral-400 hover:text-white rounded-lg transition-colors border border-neutral-800 shadow-lg flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold">
+                <i data-lucide="chevron-left" class="w-4 h-4"></i> Back to Generator
+            </button>
+        </div>
+
+        <!-- Re-imager Error Container -->
+        <div id="reimagerErrorContainer" class="hidden bg-red-900/30 text-red-400 p-4 rounded-lg items-center space-x-2 border border-red-800/50">
+            <i data-lucide="alert-circle" class="w-5 h-5 flex-shrink-0"></i>
+            <p id="reimagerErrorText" class="text-sm font-medium"></p>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+            
+            <!-- Left Column: Visuals & Generation -->
+            <div class="flex flex-col space-y-8">
+                
+                <!-- 1. Source Image Block -->
+                <div class="bg-neutral-900 p-6 rounded-xl shadow-lg border border-neutral-800 flex flex-col">
+                    <h2 class="text-lg font-semibold flex items-center space-x-2 mb-4 text-neutral-200">
+                        <i data-lucide="image" class="w-5 h-5 text-neutral-400"></i>
+                        <span>1. Source Image</span>
+                    </h2>
+                    
+                    <div class="flex-grow flex flex-col space-y-4 relative">
+                        <!-- Dropzone with Magic Overlay Canvas -->
+                        <div id="reimagerDropZone" class="border-2 border-dashed border-neutral-700 rounded-lg h-64 flex flex-col items-center justify-center bg-neutral-800/50 relative overflow-hidden group cursor-pointer hover:bg-neutral-800 transition">
+                            <img id="reimagerSourcePreview" src="" alt="Source" class="hidden w-full h-full object-contain absolute inset-0 z-0 pointer-events-none" />
+                            
+                            <!-- Magic Highlight Overlay -->
+                            <canvas id="reimagerHighlightOverlay" class="absolute inset-0 w-full h-full object-contain z-10 pointer-events-none opacity-0 transition-opacity duration-200"></canvas>
+                            
+                            <div id="reimagerEmptySource" class="text-center p-4 z-20 pointer-events-none">
+                                <i data-lucide="upload" id="reimagerUploadIcon" class="w-8 h-8 text-neutral-500 mx-auto mb-2 transition-colors"></i>
+                                <p id="reimagerDropText" class="text-sm text-neutral-400 font-medium transition-colors">Click or paste layout to Auto-Analyze</p>
+                            </div>
+
+                            <input type="file" id="reimagerFileInput" accept="image/*" class="hidden" />
+                        </div>
+                        <p class="text-[10px] text-neutral-500 text-center -mt-2">Drag mouse inside highlighted mapped areas to pan texture.</p>
+                    </div>
+                </div>
+
+                <!-- 2. Material ID Mask Block -->
+                <div class="bg-neutral-900 p-6 rounded-xl shadow-lg border border-neutral-800 flex flex-col">
+                    <h2 class="text-lg font-semibold flex items-center justify-between mb-4 text-neutral-200">
+                        <div class="flex items-center space-x-2">
+                            <i data-lucide="layers" class="w-5 h-5 text-neutral-400"></i>
+                            <span>2. Material ID Mask</span>
+                        </div>
+                        <span class="text-xs font-normal text-neutral-500 bg-neutral-800 px-2 py-1 rounded">Required for Material Mapping</span>
+                    </h2>
+                    
+                    <div class="flex-grow flex flex-col space-y-4">
+                        <div id="reimagerMaskDropZone" class="border-2 border-dashed border-neutral-700 rounded-lg h-32 flex flex-col items-center justify-center bg-neutral-800/50 relative overflow-hidden group cursor-pointer hover:bg-neutral-800 transition">
+                            <img id="reimagerMaskPreview" src="" alt="Mask" class="hidden w-full h-full object-contain" />
+                            
+                            <div id="reimagerEmptyMask" class="text-center p-4">
+                                <i data-lucide="upload" id="reimagerMaskUploadIcon" class="w-6 h-6 text-neutral-500 mx-auto mb-1 transition-colors"></i>
+                                <p id="reimagerMaskDropText" class="text-xs text-neutral-400 font-medium transition-colors">Upload or drop Color Mask to map materials</p>
+                            </div>
+
+                            <input type="file" id="reimagerMaskFileInput" accept="image/*" class="hidden" />
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. Generated Image Result Block -->
+                <div class="bg-neutral-900 p-6 rounded-xl shadow-lg border border-neutral-800 flex flex-col">
+                    <h2 class="text-lg font-semibold flex items-center space-x-2 mb-4 text-neutral-200">
+                        <i data-lucide="image-plus" class="w-5 h-5 text-neutral-400"></i>
+                        <span>3. Generated Result</span>
+                    </h2>
+                    <div class="flex-grow flex flex-col space-y-4">
+                        
+                        <!-- Separate Generate Buttons -->
+                        <div class="flex space-x-3">
+                            <button id="reimagerGenerateJsonBtn" disabled class="flex-1 py-3 px-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-xs sm:text-sm shadow-lg shadow-blue-900/20">
+                                <i data-lucide="sparkles" class="w-4 h-4 mr-2"></i>
+                                <span>Apply JSON Prompt</span>
+                            </button>
+                            <button id="reimagerGenerateMaskBtn" disabled class="flex-1 py-3 px-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-xs sm:text-sm shadow-lg shadow-indigo-900/20">
+                                <i data-lucide="layers" class="w-4 h-4 mr-2"></i>
+                                <span>Apply Material Mask</span>
+                            </button>
+                        </div>
+
+                        <!-- Generated Image Result -->
+                        <div id="reimagerGeneratedImageContainer" class="border-2 border-neutral-700 rounded-lg h-80 flex flex-col items-center justify-center bg-neutral-800/50 relative overflow-hidden mt-2 group">
+                            
+                            <!-- Generation Loader Overlay -->
+                            <div id="reimagerGenerationLoaderOverlay" class="absolute inset-0 bg-neutral-900/90 backdrop-blur-sm z-30 hidden flex-col items-center justify-center space-y-4">
+                                <i data-lucide="loader-2" class="w-10 h-10 animate-spin text-blue-500"></i>
+                                <span id="reimagerGenerationLoaderText" class="text-sm font-medium text-blue-400">Generating Image...</span>
+                            </div>
+
+                            <img id="reimagerGeneratedPreview" src="" alt="Generated" class="hidden w-full h-full object-contain cursor-pointer transition hover:opacity-90" title="Click to open slider comparison" />
+                            
+                            <!-- Action Buttons -->
+                            <div id="reimagerImageActions" class="hidden absolute bottom-4 right-4 space-x-2 opacity-0 group-hover:opacity-100 transition z-10">
+                                <a id="reimagerOpenTabBtn" href="#" target="_blank" class="bg-neutral-900/80 hover:bg-neutral-900 text-white py-2 px-3 rounded-lg backdrop-blur-sm border border-neutral-700 flex items-center space-x-2 shadow-lg" title="Open in New Tab">
+                                    <i data-lucide="external-link" class="w-4 h-4"></i>
+                                    <span class="text-sm font-medium">Open</span>
+                                </a>
+                                <a id="reimagerDownloadBtn" href="#" download="generated-room.png" class="bg-neutral-900/80 hover:bg-neutral-900 text-white py-2 px-3 rounded-lg backdrop-blur-sm border border-neutral-700 flex items-center space-x-2 shadow-lg" title="Save Image">
+                                    <i data-lucide="download" class="w-4 h-4"></i>
+                                    <span class="text-sm font-medium">Save</span>
+                                </a>
+                            </div>
+
+                            <div id="reimagerEmptyGenerated" class="text-center p-4 z-0 pointer-events-none">
+                                <i data-lucide="image" class="w-8 h-8 text-neutral-600 mx-auto mb-2"></i>
+                                <p class="text-sm text-neutral-500">Result will appear here</p>
+                            </div>
+                        </div>
+                        <p id="reimagerCompareTooltip" class="hidden text-[10px] text-neutral-500 text-center -mt-2">Click image to open before/after slider comparison.</p>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Right Column: Settings & Configuration -->
+            <div class="flex flex-col space-y-8 lg:sticky lg:top-6">
+                
+                <!-- 4. Extracted Materials -->
+                <div class="bg-neutral-900 p-6 rounded-xl shadow-lg border border-neutral-800 flex flex-col max-h-[60vh]">
+                    <div class="flex justify-between items-end border-b border-neutral-700 pb-4 mb-4">
+                        <h2 class="text-lg font-semibold flex items-center space-x-2 text-neutral-200">
+                            <i data-lucide="layers" class="w-5 h-5 text-neutral-400"></i>
+                            <span>4. Mapped Materials</span>
+                        </h2>
+                        <span class="text-xs text-neutral-500">Hover colors to isolate</span>
+                    </div>
+                    
+                    <div class="flex-grow flex flex-col overflow-y-auto custom-scrollbar pr-2 min-h-[150px]">
+                        <div id="reimagerMaterialsContainer" class="flex flex-col space-y-2">
+                            <div class="text-sm text-neutral-500 text-center mt-10" id="reimagerEmptyMaterialState">
+                                Upload a Material ID Mask in Step 2 to map materials.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 5. Editable JSON Prompt Block -->
+                <div class="bg-neutral-900 p-6 rounded-xl shadow-lg border border-neutral-800 flex flex-col relative flex-1">
+                    <!-- Loading Overlay -->
+                    <div id="reimagerJsonLoaderOverlay" class="absolute inset-0 bg-neutral-900/80 backdrop-blur-[2px] rounded-xl z-20 hidden flex-col items-center justify-center space-y-3">
+                        <i data-lucide="loader-2" class="w-8 h-8 animate-spin text-blue-400"></i>
+                        <span class="text-sm text-blue-300 font-medium tracking-wide">Extracting Scene Properties...</span>
+                    </div>
+
+                    <div class="flex justify-between items-end border-b border-neutral-700 pb-2 mb-4">
+                        <h2 class="text-lg font-semibold flex items-center space-x-2 text-neutral-200">
+                            <i data-lucide="code" class="w-5 h-5 text-neutral-400"></i>
+                            <span>5. Scene Prompt Payload</span>
+                        </h2>
+                        <button id="reimagerCopyBtn" class="text-xs flex items-center space-x-1 text-neutral-400 hover:text-neutral-200 transition bg-neutral-800 hover:bg-neutral-700 py-1 px-2 rounded">
+                            <i data-lucide="copy" id="reimagerCopyIcon" class="w-3 h-3"></i>
+                            <i data-lucide="check" id="reimagerCheckIcon" class="w-3 h-3 text-green-400 hidden"></i>
+                            <span id="reimagerCopyText">Copy</span>
+                        </button>
+                    </div>
+                    
+                    <textarea id="reimagerJsonEditor" class="w-full min-h-[250px] flex-grow p-4 bg-black text-green-400 text-xs font-mono rounded-lg border border-neutral-700 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none resize-y custom-scrollbar" spellcheck="false"></textarea>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden elements for processing -->
+    <canvas id="reimagerHiddenMaskCanvas" class="hidden"></canvas>
+
+    <!-- Mask Edit Lightbox / Modal -->
+    <div id="reimagerMaskEditModal" class="fixed inset-0 z-[150] bg-black/95 hidden flex-col items-center justify-center p-6 backdrop-blur-sm">
+        <div class="w-full h-full max-w-6xl flex flex-col bg-neutral-900 border border-neutral-700 rounded-lg overflow-hidden shadow-2xl">
+            <!-- Toolbar -->
+            <div class="flex flex-wrap items-center justify-between p-4 border-b border-neutral-700 bg-neutral-800 gap-4">
+                <div class="flex items-center space-x-6">
+                    <h3 class="text-sm font-semibold text-white flex items-center space-x-2">
+                        <i data-lucide="pen-tool" class="w-4 h-4 text-blue-400"></i>
+                        <span>Mask Editor</span>
+                    </h3>
+                    
+                    <!-- Tools -->
+                    <div class="flex space-x-1 bg-neutral-900 p-1 rounded-md border border-neutral-700">
+                        <input type="radio" id="reimagerToolBrush" name="reimagerMaskTool" value="brush" class="tool-radio hidden" checked>
+                        <label for="reimagerToolBrush" class="cursor-pointer px-3 py-1.5 rounded text-xs font-medium text-neutral-400 hover:text-white transition flex items-center space-x-1">
+                            <i data-lucide="paintbrush" class="w-3.5 h-3.5"></i><span>Brush</span>
+                        </label>
+                        
+                        <input type="radio" id="reimagerToolWand" name="reimagerMaskTool" value="wand" class="tool-radio hidden">
+                        <label for="reimagerToolWand" class="cursor-pointer px-3 py-1.5 rounded text-xs font-medium text-neutral-400 hover:text-white transition flex items-center space-x-1">
+                            <i data-lucide="wand-2" class="w-3.5 h-3.5"></i><span>Wand</span>
+                        </label>
+                    </div>
+
+                    <!-- Action Modes -->
+                    <div class="flex space-x-1 bg-neutral-900 p-1 rounded-md border border-neutral-700 relative group">
+                        <input type="radio" id="reimagerModeAdd" name="reimagerMaskMode" value="add" class="tool-radio hidden" checked>
+                        <label for="reimagerModeAdd" class="cursor-pointer px-3 py-1.5 rounded text-xs font-medium text-neutral-400 hover:text-white transition flex items-center space-x-1">
+                            <i data-lucide="plus" class="w-3.5 h-3.5"></i><span>Add</span>
+                        </label>
+                        
+                        <input type="radio" id="reimagerModeErase" name="reimagerMaskMode" value="erase" class="tool-radio hidden">
+                        <label for="reimagerModeErase" class="cursor-pointer px-3 py-1.5 rounded text-xs font-medium text-neutral-400 hover:text-white transition flex items-center space-x-1">
+                            <i data-lucide="minus" class="w-3.5 h-3.5"></i><span>Erase</span>
+                        </label>
+                    </div>
+
+                    <!-- Sliders -->
+                    <div class="flex items-center space-x-4">
+                        <div class="flex items-center space-x-2" id="reimagerBrushSizeWrapper">
+                            <span class="text-xs text-neutral-400 w-12 text-right">Size <span id="reimagerBrushSizeVal">20</span></span>
+                            <input type="range" id="reimagerBrushSize" min="1" max="150" value="20" class="w-24 h-1.5 bg-neutral-700 rounded-lg appearance-none cursor-pointer">
+                        </div>
+                        <div class="flex items-center space-x-2 opacity-50 pointer-events-none transition-opacity" id="reimagerWandTolWrapper">
+                            <span class="text-xs text-neutral-400 w-16 text-right">Tol. <span id="reimagerWandTolVal">30</span></span>
+                            <input type="range" id="reimagerWandTolerance" min="1" max="150" value="30" class="w-24 h-1.5 bg-neutral-700 rounded-lg appearance-none cursor-pointer">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-center space-x-2">
+                    <button id="reimagerCancelMaskEditBtn" class="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-white rounded text-sm font-medium transition border border-neutral-700">Cancel</button>
+                    <button id="reimagerSaveMaskEditBtn" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded text-sm font-medium transition shadow-lg shadow-blue-900/20">Apply Mask</button>
+                </div>
+            </div>
+            
+            <!-- Canvas Area -->
+            <div class="flex-grow relative overflow-auto bg-neutral-950 flex items-center justify-center p-4" id="reimagerMaskEditContainer">
+                <canvas id="reimagerMaskEditDisplayCanvas" class="shadow-2xl border border-neutral-800 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMCIgaGVpZ2h0PSIyMCI+CjxyZWN0IHdpZHRoPSIyMCIgaGVpZ2h0PSIyMCIgZmlsbD0iI2ZmZiIvPgo8cmVjdCB3aWR0aD0iMTAiIGhlaWdodD0iMTAiIGZpbGw9IiNjY2MiLz4KPHJlY3QgeD0iMTAiIHk9IjEwIiB3aWR0aD0iMTAiIGhlaWdodD0iMTAiIGZpbGw9IiNjY2MiLz4KPC9zdmc+')] cursor-crosshair max-w-full max-h-full object-contain"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cropper Modal Lightbox -->
+    <div id="reimagerCropModal" class="fixed inset-0 z-[160] bg-black/95 hidden flex-col items-center justify-center p-6 backdrop-blur-sm">
+        <div class="w-full max-w-4xl flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold text-white flex items-center space-x-2">
+                <i data-lucide="crop" class="w-5 h-5"></i>
+                <span>Crop Texture Map</span>
+            </h3>
+            <button id="reimagerCloseCropBtn" class="text-neutral-400 hover:text-white transition"><i data-lucide="x" class="w-6 h-6"></i></button>
+        </div>
+        <div class="w-full max-w-4xl h-[60vh] bg-neutral-900 border border-neutral-700 rounded-lg overflow-hidden flex items-center justify-center">
+            <img id="reimagerCropImage" src="" class="block max-w-full max-h-full" />
+        </div>
+        <div class="w-full max-w-4xl flex justify-end mt-6 space-x-3">
+            <button id="reimagerCancelCropBtn" class="px-5 py-2.5 bg-neutral-800 hover:bg-neutral-700 text-white rounded-lg font-medium transition">Cancel</button>
+            <button id="reimagerSaveCropBtn" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium shadow-lg shadow-blue-900/20 transition">Crop & Apply</button>
+        </div>
+    </div>
+
+    <!-- Before / After Comparison Lightbox -->
+    <div id="reimagerCompareModal" class="fixed inset-0 z-[150] bg-black/95 hidden flex-col items-center justify-center p-6 backdrop-blur-sm">
+        <div class="w-full max-w-5xl flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold text-white flex items-center space-x-2">
+                <i data-lucide="split" class="w-5 h-5 text-blue-400"></i>
+                <span>Interactive Before / After Comparison</span>
+            </h3>
+            <button id="reimagerCloseCompareBtn" class="text-neutral-400 hover:text-white transition"><i data-lucide="x" class="w-6 h-6"></i></button>
+        </div>
+        
+        <div class="w-full max-w-5xl h-[70vh] bg-neutral-900 border border-neutral-700 rounded-lg overflow-hidden relative flex items-center justify-center select-none" id="reimagerCompareSliderContainer">
+            <img id="reimagerCompareBeforeImg" src="" alt="Before" class="absolute w-full h-full object-contain pointer-events-none" />
+            <div id="reimagerCompareAfterWrapper" class="absolute inset-0 w-full h-full pointer-events-none" style="clip-path: polygon(0 0, 50% 0, 50% 100%, 0 100%);">
+                <img id="reimagerCompareAfterImg" src="" alt="After" class="w-full h-full object-contain pointer-events-none" />
+            </div>
+            
+            <div id="reimagerCompareSliderLine" class="absolute top-0 bottom-0 w-0.5 bg-white shadow-[0_0_12px_rgba(0,0,0,0.8)] pointer-events-none z-20" style="left: 50%;">
+                <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 bg-white text-black rounded-full shadow-lg flex items-center justify-center border-2 border-neutral-800">
+                    <i data-lucide="chevrons-left-right" class="w-4 h-4"></i>
+                </div>
+            </div>
+
+            <input type="range" id="reimagerCompareSliderInput" min="0" max="100" value="50" class="absolute inset-0 w-full h-full opacity-0 cursor-ew-resize z-30" />
+        </div>
+        
+        <div class="w-full max-w-5xl flex justify-between mt-4 text-xs text-neutral-400">
+            <span>← Before (Original)</span>
+            <span>Drag handle to compare</span>
+            <span>After (Re-imaged) →</span>
+        </div>
+    </div>
+
+    <script>
+        // Global helper for Base64 conversion
+        function fileToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = reject;
+            });
+        }
+
+        // Initialize Icons
+        lucide.createIcons();
+
+        // Constants and State
+        const apiKey = ""; // API key is provided by the execution environment
+        
+        const state = {
+            orig: { base64: null, mime: null, width: null, height: null },
+            ref: { base64: null, mime: null, width: null, height: null },
+            lastGeneratedPrompt: '',
+            lastGeneratedJSON: '',
+            isGenerating: false
+        };
+        
+        const focusAreas = ['Environment', 'Interior Lighting', 'Material Texture', 'Composition', 'Layout', 'View Angle & Perspective', 'View Background', 'Temperature Tone', 'Metadata Realism Detail'];
+        const selectedFocuses = new Set();
+
+        // DOM Elements
+        const els = {
+            orig: {
+                zone: document.getElementById('upload-zone-orig'),
+                input: document.getElementById('file-input-orig'),
+                previewCont: document.getElementById('preview-container-orig'),
+                previewImg: document.getElementById('preview-image-orig'),
+                placeholder: document.getElementById('placeholder-orig')
+            },
+            ref: {
+                zone: document.getElementById('upload-zone-ref'),
+                input: document.getElementById('file-input-ref'),
+                previewCont: document.getElementById('preview-container-ref'),
+                previewImg: document.getElementById('preview-image-ref'),
+                placeholder: document.getElementById('placeholder-ref')
+            },
+            errorCont: document.getElementById('error-container'),
+            errorText: document.getElementById('error-text'),
+            genBtn: document.getElementById('generate-btn'),
+            btnIconSparkles: document.getElementById('btn-icon-sparkles'),
+            btnIconLoader: document.getElementById('btn-icon-loader'),
+            btnText: document.getElementById('btn-text'),
+            resetBtn: document.getElementById('reset-btn'),
+            outEmpty: document.getElementById('output-empty'),
+            outLoading: document.getElementById('output-loading'),
+            loadingText: document.getElementById('loading-status-text'),
+            genImage: document.getElementById('generated-image'),
+            outContent: document.getElementById('output-content'),
+            jsonOutputContent: document.getElementById('json-output-content'),
+            copyBtn: document.getElementById('copy-btn'),
+            copyIcon: document.getElementById('copy-icon'),
+            checkIcon: document.getElementById('check-icon'),
+            copyText: document.getElementById('copy-text'),
+            copyJsonBtn: document.getElementById('copy-json-btn'),
+            copyJsonIcon: document.getElementById('copy-json-icon'),
+            checkJsonIcon: document.getElementById('check-json-icon'),
+            copyJsonText: document.getElementById('copy-json-text'),
+            focusCont: document.getElementById('focus-options'),
+            customFocusInput: document.getElementById('custom-focus-input'),
+            addFocusBtn: document.getElementById('add-focus-btn'),
+            customNegativeInput: document.getElementById('custom-negative-input'),
+            aspectBtns: document.querySelectorAll('.aspect-btn'),
+            lockPromptToggle: document.getElementById('lock-prompt-toggle'),
+            lockJsonToggle: document.getElementById('lock-json-toggle'),
+            usePromptToggle: document.getElementById('use-prompt-toggle'),
+            promptUseOn: document.getElementById('prompt-use-on'),
+            promptUseOff: document.getElementById('prompt-use-off'),
+            useJsonToggle: document.getElementById('use-json-toggle'),
+            jsonUseOn: document.getElementById('json-use-on'),
+            jsonUseOff: document.getElementById('json-use-off'),
+            // Save/Load Elements
+            saveSessionBtn: document.getElementById('save-session-btn'),
+            loadSessionBtn: document.getElementById('load-session-btn'),
+            loadSessionInput: document.getElementById('load-session-input'),
+            // Modal Elements
+            zoomModal: document.getElementById('zoom-modal'),
+            modalTrackpad: document.getElementById('modal-trackpad'),
+            modalImageContainer: document.getElementById('modal-image-container'),
+            modalImageOrig: document.getElementById('modal-image-orig'),
+            modalImageGen: document.getElementById('modal-image-gen'),
+            compareSlider: document.getElementById('compare-slider'),
+            compareLine: document.getElementById('compare-line'),
+            compareControl: document.getElementById('compare-control'),
+            modalCloseBtn: document.getElementById('modal-close-btn'),
+            modalOpenTabBtn: document.getElementById('modal-open-tab-btn'),
+            // Combined Actions UI
+            resultActions: document.getElementById('result-actions'),
+            actionCompareBtn: document.getElementById('action-compare-btn'),
+            actionReimageBtn: document.getElementById('action-reimage-btn'),
+            modalLaunchReimagerBtn: document.getElementById('modal-launch-reimager-btn')
+        };
+
+        // Initialize Focus Chips
+        const createFocusChip = (area, autoSelect = false) => {
+            const btn = document.createElement('button');
+            btn.className = "px-3 py-1.5 rounded-lg border border-neutral-700 text-sm text-neutral-400 hover:border-neutral-500 transition-colors bg-neutral-800/50";
+            btn.textContent = area;
+            
+            const toggleSelect = (forceSelect) => {
+                const willSelect = forceSelect !== undefined ? forceSelect : !selectedFocuses.has(area);
+                if (!willSelect) {
+                    selectedFocuses.delete(area);
+                    btn.classList.remove('bg-blue-900/30', 'border-blue-700', 'text-blue-300');
+                    btn.classList.add('border-neutral-700', 'text-neutral-400', 'bg-neutral-800/50');
+                } else {
+                    selectedFocuses.add(area);
+                    btn.classList.add('bg-blue-900/30', 'border-blue-700', 'text-blue-300');
+                    btn.classList.remove('border-neutral-700', 'text-neutral-400', 'bg-neutral-800/50');
+                }
+            };
+
+            btn.onclick = () => toggleSelect();
+            if (autoSelect) toggleSelect(true);
+            els.focusCont.appendChild(btn);
+        };
+
+        focusAreas.forEach(area => createFocusChip(area));
+
+        // Add Custom Focus Logic
+        const handleAddCustomFocus = () => {
+            const val = els.customFocusInput.value.trim();
+            if (!val) return;
+            
+            const exists = focusAreas.some(a => a.toLowerCase() === val.toLowerCase());
+            if (!exists) {
+                focusAreas.push(val);
+                createFocusChip(val, true);
+            }
+            els.customFocusInput.value = '';
+        };
+
+        els.addFocusBtn.addEventListener('click', handleAddCustomFocus);
+        els.customFocusInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                handleAddCustomFocus();
+            }
+        });
+
+        // Helpers
+        const showError = (msg) => {
+            els.errorText.textContent = msg;
+            els.errorCont.classList.remove('hidden-important');
+        };
+
+        const hideError = () => els.errorCont.classList.add('hidden-important');
+
+        const updateGenerateBtnState = () => {
+            const canGenerate = state.orig.base64 && state.ref.base64 && !state.isGenerating;
+            els.genBtn.disabled = !canGenerate;
+            
+            if (!canGenerate && !state.isGenerating) {
+                els.genBtn.className = "w-full py-4 px-4 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all shadow-sm bg-neutral-800 text-neutral-500 cursor-not-allowed";
+            } else if (!state.isGenerating) {
+                els.genBtn.className = "w-full py-4 px-4 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all shadow-sm bg-blue-600 text-white hover:bg-blue-500 hover:shadow-md active:scale-[0.98]";
+            }
+        };
+
+        const setUIProcessingState = (isProcessing, statusText = '') => {
+            state.isGenerating = isProcessing;
+            updateGenerateBtnState();
+
+            if (isProcessing) {
+                els.btnIconSparkles.classList.add('hidden-important');
+                els.btnIconLoader.classList.remove('hidden-important');
+                els.btnText.textContent = "Processing...";
+                
+                els.outEmpty.classList.add('hidden-important');
+                els.genImage.classList.add('hidden-important');
+                els.resultActions.classList.add('hidden-important');
+                els.outLoading.classList.remove('hidden-important');
+                els.loadingText.textContent = statusText;
+            } else {
+                els.btnIconSparkles.classList.remove('hidden-important');
+                els.btnIconLoader.classList.add('hidden-important');
+                els.btnText.textContent = "Generate Enhanced Image";
+                els.outLoading.classList.add('hidden-important');
+            }
+        };
+
+        // Aspect Ratio Logic
+        let currentAspect = 'original';
+
+        els.aspectBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                els.aspectBtns.forEach(b => {
+                    b.classList.remove('bg-neutral-800', 'text-neutral-200', 'shadow-sm', 'active-aspect');
+                    b.classList.add('text-neutral-500');
+                });
+                btn.classList.remove('text-neutral-500');
+                btn.classList.add('bg-neutral-800', 'text-neutral-200', 'shadow-sm', 'active-aspect');
+                currentAspect = btn.dataset.aspect;
+            });
+        });
+
+        // Save and Load Session Logic
+        els.saveSessionBtn.addEventListener('click', () => {
+            const promptText = els.outContent.innerText;
+            const jsonText = els.jsonOutputContent.innerText;
+            const focusText = Array.from(selectedFocuses).join(', ');
+            const negativeText = els.customNegativeInput.value;
+            const aspectText = currentAspect;
+
+            if (!promptText || promptText === 'Waiting for generation...') {
+                showError("No generated prompt to save. Please generate a prompt first.");
+                setTimeout(hideError, 4000);
+                return;
+            }
+
+            const dataStr = `=== PROMPT TRANSFER AI SESSION ===\n\n[EXTRACTED PROMPT]\n${promptText}\n\n[RAW JSON]\n${jsonText}\n\n[FOCUS AREAS]\n${focusText}\n\n[CUSTOM NEGATIVE]\n${negativeText}\n\n[OUTPUT DIMENSIONS]\n${aspectText}`;
+            const blob = new Blob([dataStr], { type: "text/plain;charset=utf-8" });
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Prompt_Session_${new Date().getTime()}.txt`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        });
+
+        els.loadSessionBtn.addEventListener('click', () => {
+            els.loadSessionInput.click();
+        });
+
+        els.loadSessionInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                try {
+                    const text = event.target.result;
+                    let promptData = "";
+                    let jsonData = "";
+                    let focusData = "";
+                    let negativeData = "";
+                    let aspectData = "";
+
+                    if (text.includes("=== PROMPT TRANSFER AI SESSION ===") || text.includes("[EXTRACTED PROMPT]")) {
+                        const getSection = (str, startTag, endTags) => {
+                            if (!str.includes(startTag)) return "";
+                            let chunk = str.split(startTag)[1];
+                            let earliestEndIndex = chunk.length;
+                            endTags.forEach(tag => {
+                                const idx = chunk.indexOf(tag);
+                                if (idx !== -1 && idx < earliestEndIndex) earliestEndIndex = idx;
+                            });
+                            return chunk.substring(0, earliestEndIndex).trim();
+                        };
+
+                        const tags = ["[EXTRACTED PROMPT]", "[RAW JSON]", "[FOCUS AREAS]", "[CUSTOM NEGATIVE]", "[OUTPUT DIMENSIONS]"];
+                        
+                        promptData = getSection(text, "[EXTRACTED PROMPT]", tags);
+                        jsonData = getSection(text, "[RAW JSON]", tags);
+                        focusData = getSection(text, "[FOCUS AREAS]", tags);
+                        negativeData = getSection(text, "[CUSTOM NEGATIVE]", tags);
+                        aspectData = getSection(text, "[OUTPUT DIMENSIONS]", tags);
+                    } else {
+                        const data = JSON.parse(text);
+                        if (data.prompt !== undefined && data.json !== undefined) {
+                            promptData = data.prompt;
+                            jsonData = data.json;
+                        } else {
+                            throw new Error("Invalid session format");
+                        }
+                    }
+
+                    if (promptData && jsonData) {
+                        els.outContent.innerText = promptData;
+                        els.jsonOutputContent.innerText = jsonData;
+                        state.lastGeneratedPrompt = promptData;
+                        state.lastGeneratedJSON = jsonData;
+                        
+                        if (text.includes("[CUSTOM NEGATIVE]")) {
+                            els.customNegativeInput.value = negativeData;
+                        }
+
+                        if (text.includes("[OUTPUT DIMENSIONS]") && aspectData) {
+                            const aspectBtn = Array.from(els.aspectBtns).find(btn => btn.dataset.aspect === aspectData);
+                            if (aspectBtn) aspectBtn.click();
+                        }
+
+                        if (text.includes("[FOCUS AREAS]")) {
+                            selectedFocuses.clear();
+                            els.focusCont.innerHTML = '';
+                            focusAreas.length = 0;
+                            focusAreas.push('Environment', 'Interior Lighting', 'Material Texture', 'Composition', 'Layout', 'View Angle & Perspective', 'View Background', 'Temperature Tone', 'Metadata Realism Detail');
+                            
+                            const loadedAreas = focusData.split(',').map(s => s.trim()).filter(Boolean);
+                            loadedAreas.forEach(area => {
+                                if (!focusAreas.some(a => a.toLowerCase() === area.toLowerCase())) {
+                                    focusAreas.push(area);
+                                }
+                            });
+
+                            focusAreas.forEach(area => {
+                                const shouldSelect = loadedAreas.some(a => a.toLowerCase() === area.toLowerCase());
+                                createFocusChip(area, shouldSelect);
+                            });
+                        }
+                        
+                        els.lockPromptToggle.checked = true;
+                        els.lockJsonToggle.checked = true;
+                        els.usePromptToggle.checked = true;
+                        els.useJsonToggle.checked = true;
+
+                        els.promptUseOn.classList.remove('hidden-important');
+                        els.promptUseOff.classList.add('hidden-important');
+                        els.jsonUseOn.classList.remove('hidden-important');
+                        els.jsonUseOff.classList.add('hidden-important');
+                        
+                        els.outContent.classList.remove('hidden-important');
+                        els.jsonOutputContent.classList.remove('hidden-important');
+
+                        alert("Session successfully loaded! Prompts and settings are now locked and ready for generation.");
+                    } else {
+                        throw new Error("Missing required data sections.");
+                    }
+                } catch(err) {
+                    console.error("Load Session Error:", err);
+                    showError("Error loading file. Please ensure it is a valid Prompt Transfer AI text file.");
+                    setTimeout(hideError, 4000);
+                }
+                els.loadSessionInput.value = '';
+            };
+            reader.readAsText(file);
+        });
+
+        // File Processing
+        const processFile = (file, type) => {
+            if (!file) return;
+            if (!file.type.startsWith('image/')) {
+                showError('Please upload a valid image file.');
+                return;
+            }
+            
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const result = e.target.result;
+                const base64 = result.split(',')[1];
+                
+                state[type].base64 = base64;
+                state[type].mime = file.type;
+                
+                const img = new Image();
+                img.onload = () => {
+                    state[type].width = img.width;
+                    state[type].height = img.height;
+                };
+                img.src = result;
+                
+                els[type].previewImg.src = result;
+                els[type].placeholder.classList.add('hidden-important');
+                els[type].previewCont.classList.remove('hidden-important');
+                
+                hideError();
+                updateGenerateBtnState();
+            };
+            reader.readAsDataURL(file);
+        };
+
+        // Event Listeners for File Inputs
+        ['orig', 'ref'].forEach(type => {
+            els[type].zone.addEventListener('click', () => els[type].input.click());
+            
+            els[type].input.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) processFile(e.target.files[0], type);
+            });
+
+            els[type].zone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                els[type].zone.classList.add('bg-neutral-800/50');
+            });
+
+            els[type].zone.addEventListener('dragleave', (e) => {
+                e.preventDefault();
+                els[type].zone.classList.remove('bg-neutral-800/50');
+            });
+
+            els[type].zone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                els[type].zone.classList.remove('bg-neutral-800/50');
+                if (e.dataTransfer.files[0]) {
+                    processFile(e.dataTransfer.files[0], type);
+                }
+            });
+        });
+
+        // Smart Paste Handling
+        window.addEventListener('paste', (e) => {
+            const items = e.clipboardData?.items;
+            if (!items) return;
+            
+            for (let i = 0; i < items.length; i++) {
+                if (items[i].type.indexOf('image') !== -1) {
+                    const file = items[i].getAsFile();
+                    if (!state.orig.base64) {
+                        processFile(file, 'orig');
+                    } else if (!state.ref.base64) {
+                        processFile(file, 'ref');
+                    } else {
+                        processFile(file, 'orig');
+                    }
+                    e.preventDefault();
+                    break;
+                }
+            }
+        });
+
+        // Zoom Modal Logic
+        let zoomScale = 1;
+        let panX = 0;
+        let panY = 0;
+        let isDragging = false;
+        let startX = 0;
+        let startY = 0;
+
+        const updateModalTransform = () => {
+            els.modalImageContainer.style.transform = `translate(${panX}px, ${panY}px) scale(${zoomScale})`;
+        };
+
+        const updateCompareState = () => {
+            const val = els.compareSlider.value;
+            els.modalImageGen.style.clipPath = `inset(0 ${100 - val}% 0 0)`;
+            els.compareLine.style.left = `${val}%`;
+            
+            if (val > 0 && val < 100) {
+                els.compareLine.classList.remove('hidden-important');
+            } else {
+                els.compareLine.classList.add('hidden-important');
+            }
+        };
+
+        els.compareSlider.addEventListener('input', updateCompareState);
+
+        const openCompareLightbox = () => {
+            if (state.orig.base64) {
+                els.modalImageOrig.src = `data:${state.orig.mime};base64,${state.orig.base64}`;
+            }
+            els.modalImageGen.src = els.genImage.src;
+            
+            els.compareSlider.value = 100;
+            updateCompareState();
+
+            zoomScale = 1;
+            panX = 0;
+            panY = 0;
+            updateModalTransform();
+            
+            els.zoomModal.classList.remove('hidden-important', 'hidden');
+            document.body.style.overflow = 'hidden';
+        };
+
+        els.genImage.addEventListener('click', openCompareLightbox);
+        els.actionCompareBtn.addEventListener('click', openCompareLightbox);
+
+        els.modalCloseBtn.addEventListener('click', () => {
+            els.zoomModal.classList.add('hidden-important');
+            document.body.style.overflow = '';
+        });
+
+        els.zoomModal.addEventListener('click', (e) => {
+            if (e.target === els.modalTrackpad || e.target === els.zoomModal) {
+                els.zoomModal.classList.add('hidden-important');
+                document.body.style.overflow = '';
+            }
+        });
+
+        els.modalTrackpad.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const zoomSensitivity = 0.002;
+            const delta = -e.deltaY * zoomSensitivity;
+            let newScale = zoomScale * (1 + delta);
+            newScale = Math.max(0.5, Math.min(newScale, 15));
+            zoomScale = newScale;
+            updateModalTransform();
+        });
+
+        els.modalTrackpad.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            startX = e.clientX - panX;
+            startY = e.clientY - panY;
+            els.modalTrackpad.classList.remove('cursor-grab');
+            els.modalTrackpad.classList.add('cursor-grabbing');
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!isDragging || els.zoomModal.classList.contains('hidden-important')) return;
+            panX = e.clientX - startX;
+            panY = e.clientY - startY;
+            updateModalTransform();
+        });
+
+        window.addEventListener('mouseup', () => {
+            isDragging = false;
+            els.modalTrackpad.classList.add('cursor-grab');
+            els.modalTrackpad.classList.remove('cursor-grabbing');
+        });
+
+        // Open Base64 Image in New Tab
+        els.modalOpenTabBtn.addEventListener('click', async () => {
+            try {
+                const res = await fetch(els.modalImageGen.src);
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const newTab = window.open(url, '_blank');
+                if (!newTab) throw new Error("Pop-up blocker prevented opening the tab.");
+            } catch (err) {
+                alert("Could not open in a new tab. Your browser might be blocking it.");
+            }
+        });
+
+        // API Call Helper
+        const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+        const fetchWithRetry = async (url, options, maxRetries = 5) => {
+            let retries = 0;
+            const baseDelay = 1000;
+
+            while (retries < maxRetries) {
+                try {
+                    const response = await fetch(url, options);
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({}));
+                        throw new Error(`API Error: ${response.status} - ${errorData.error?.message || response.statusText}`);
+                    }
+                    return await response.json();
+                } catch (err) {
+                    retries++;
+                    if (retries >= maxRetries) throw err;
+                    await delay(baseDelay * Math.pow(2, retries - 1));
+                }
+            }
+        };
+
+        // Generation Pipeline
+        els.genBtn.addEventListener('click', async () => {
+            if (!state.orig.base64 || !state.ref.base64 || state.isGenerating) return;
+
+            const isPromptLocked = els.lockPromptToggle.checked;
+            const isJsonLocked = els.lockJsonToggle.checked;
+
+            if (isPromptLocked && (!state.lastGeneratedPrompt && !els.outContent.textContent.trim().startsWith('['))) {
+                showError("No prompt exists to lock. Please generate normally first to extract a prompt.");
+                els.lockPromptToggle.checked = false;
+                return;
+            }
+
+            if (isJsonLocked && !isPromptLocked && !els.jsonOutputContent.textContent.trim().startsWith('{')) {
+                showError("No valid JSON exists to lock. Please generate normally first or enter valid JSON.");
+                els.lockJsonToggle.checked = false;
+                return;
+            }
+
+            let statusMessage = "Extracting style prompt via JSON schema...";
+            if (isPromptLocked && isJsonLocked) statusMessage = "Generating image using locked text prompt and locked JSON...";
+            else if (isPromptLocked) statusMessage = "Using locked text prompt for generation...";
+            else if (isJsonLocked) statusMessage = "Rebuilding text prompt from locked JSON...";
+            
+            setUIProcessingState(true, statusMessage);
+            hideError();
+            
+            // Generate Rules Based on Focus Area
+            const selectedList = Array.from(selectedFocuses);
+            let unselectedList = focusAreas.filter(area => !selectedFocuses.has(area));
+
+            if (selectedFocuses.has('View Angle & Perspective')) {
+                unselectedList = unselectedList.filter(area => area !== 'Composition' && area !== 'Layout');
+            }
+
+            const isPerspectiveChange = selectedFocuses.has('View Angle & Perspective');
+
+            let activePrompt = "";
+
+            try {
+                if (!isPromptLocked) {
+                    let rulesText = `[CRITICAL LATENT RULES]\n`;
+                    
+                    if (isPerspectiveChange) {
+                        rulesText += `1. [PERSPECTIVE OVERRIDE]: The user explicitly requested a perspective transfer. You MUST completely redraw the subject from the Original Image using the exact camera angle, perspective, focal length, and 3D orientation of the Reference Image. CRITICAL: YOU MUST STRICTLY RETAIN THE ORIGINAL FURNITURE. DO NOT import any furniture, bookshelves, tables, or props from the Reference Image.\n`;
+                    } else {
+                        rulesText += `1. [IDENTITY LOCK]: Preserve exact spatial composition, object placement, camera transform, focal length, perspective lines, architectural proportions, and scene depth pixel-for-pixel.\n`;
+                        rulesText += `2. [NO GENERATIVE REDESIGN]: Do not reinterpret architecture, styling, decor, layout, geometry, or composition.\n`;
+                        rulesText += `3. [LATENT STABILITY & 1-TO-1 GEOMETRY]: Maintain identical latent spatial structure throughout denoising. YOU ARE STRICTLY FORBIDDEN from adding new furniture, removing existing furniture, or moving walls/windows.\n`;
+                    }
+                    
+                    rulesText += `${isPerspectiveChange ? '2' : '4'}. [REALISM-ONLY MODIFICATION]: Only enhance physical realism of lighting transport, material microdetail, shadow fidelity, and exposure response.\n`;
+                    rulesText += `${isPerspectiveChange ? '3' : '5'}. [ANTI-CONTAMINATION]: NEVER transfer physical objects, furniture, or architectural features from the Reference Image unless 'Composition' or 'Layout' is explicitly selected. Only transfer the requested abstract qualities (lighting, textures, angles).\n`;
+                    
+                    if (unselectedList.length > 0) {
+                        rulesText += `${isPerspectiveChange ? '4' : '6'}. STRICTLY PRESERVE ORIGINAL ELEMENTS: You MUST NOT alter the following elements from the Original Image: [ ${unselectedList.join(', ')} ]. Keep their exact appearance, colors, lighting, and textures completely identical to the Original Image.\n`;
+                    }
+                    
+                    if (selectedList.length > 0) {
+                        rulesText += `${unselectedList.length > 0 ? (isPerspectiveChange ? '5' : '7') : (isPerspectiveChange ? '4' : '6')}. APPLY FROM REFERENCE: ONLY extract and apply the qualities of the reference image to the following selected elements: [ ${selectedList.join(', ')} ].\n`;
+                    }
+
+                    const customNegative = els.customNegativeInput.value.trim();
+
+                    let focusInstruction = selectedList.length > 0 ? 
+                        `\n\n[CRITICAL FOCUS REQUIREMENTS]\nThe user ONLY wants to apply the following specific elements from the reference image: [ ${selectedList.join(', ')} ]. \nYour generated positive_prompt MUST ONLY instruct the AI to enhance these specific elements. YOU MUST COMPLETELY IGNORE AND EXCLUDE any physical objects, furniture (like tables, bookshelves), or props from the Reference Image from your description unless 'Composition' or 'Layout' are selected. Your negative_prompt MUST heavily penalize changing the unselected elements: [ ${unselectedList.join(', ')} ] (e.g. "changed materials", "altered lighting", "added furniture from reference").` 
+                        : `\n\n[CRITICAL FOCUS REQUIREMENTS]\nThe user has not selected specific focus areas. Provide a general instruction to enhance photorealism without altering any materials, composition, or lighting setup of the original image.`;
+                    
+                    if (customNegative) {
+                        focusInstruction += `\n\n[CUSTOM NEGATIVE PROMPT]\nThe user explicitly wants to avoid the following elements: ${customNegative}. Add these seamlessly into your negative_prompt output.`;
+                    }
+
+                    // Phase 1: Extract Text Prompt (JSON)
+                    let data;
+                    
+                    if (isJsonLocked) {
+                        try {
+                            data = JSON.parse(els.jsonOutputContent.innerText);
+                        } catch (e) {
+                            throw new Error("Invalid JSON format in the locked Raw JSON Analysis. Please fix syntax errors or unlock to generate fresh JSON.");
+                        }
+                    } else {
+                        const systemPrompt = `You are an elite VFX supervisor, technical prompt engineer, and Latent Stability Expert. Your absolute goal is to deeply analyze the provided highly realistic reference image with EXHAUSTIVE, ENCYCLOPEDIC precision to create a "Spatial Mapping and Lighting Template" that physically locks the AI generation seed for fixed random generation and prevents ANY structural hallucination.
+                        
+                        CRITICAL SEED-LOCKING & DETERMINISTIC RULES YOU MUST FOLLOW:
+                        1. 100% STRICT VISUAL GROUNDING: Your entire analysis and generated prompt MUST completely relate to the specific reference image provided. DO NOT use placeholder examples unless they literally exist in the image.
+                        2. EXHAUSTIVE ENCYCLOPEDIC DETAIL: Ignore length limits. Provide an overwhelming amount of detail. Map the exact placement, material, and geometric relationship of EVERY single visible object. The more precise text you generate, the less the diffusion model can hallucinate.
+                        3. PROMPT ENTROPY REDUCTION: DO NOT use abstract stylistic words (luxury, cinematic, immersive). Use deterministic, physically accurate wording (photometric, measured exposure, ray-traced ambient occlusion, subsurface scattering, index of refraction).
+                        4. ABSOLUTE SPATIAL COORDINATES: Lock every object, light source, shadow angle, and reflection mapping using clock-face positions (e.g. "from the 2 o'clock position") AND explicit grid quadrants (e.g., "lower-left foreground").
+                        5. Specify Exact Numbers and Direction: Extract and state exact quantities of all elements physically present.
+                        6. Fixed Deterministic Generation Parameters: You MUST provide exact recommended stable parameters: Seed (random 10-digit), Sampler ('DPM++ SDE Karras' or 'UniPC'), CFG (4.5 - 5.5), Steps (35), Denoise Strength (0.18 - 0.32, ideally 0.22), exact ControlNet stack, and VAE lock constraints.
+                        7. ANTI-CONTAMINATION: If 'Composition' or 'Layout' are NOT explicitly selected in the focus areas, YOU MUST COMPLETELY IGNORE all furniture, props, tables, bookshelves, and specific architectural shapes in the reference image. Describe ONLY the requested atmospheric/stylistic/angle elements.
+                        
+                        CRITICAL RULE FOR "ENVIRONMENT": When extracting environment or lighting details, ONLY extract the light itself. EXCLUDE physical surroundings UNLESS "View Background" is selected.
+                        
+                        You must return a structured JSON response containing the exact prompt elements following this methodology.` + focusInstruction;
+
+                        const analysisProperties = {};
+                        if (selectedList.length === 0) {
+                            analysisProperties["overall_realism_and_lighting"] = { 
+                                type: "STRING", 
+                                description: "An exhaustively detailed, maximum-length Spatial Mapping extraction using clock-face positions, exact grid quadrant locations, exact shadow directions, and exhaustive lists of every object present to lock the seed. Do not summarize; detail everything." 
+                            };
+                        } else {
+                            selectedList.forEach(area => {
+                                const key = area.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+                                let desc = `Exhaustively detailed, maximum-length encyclopedic breakdown of ${area}. MUST use physically accurate wording and exact spatial coordinates. NO abstract stylistic words.`;
+                                if (area === 'Environment') desc = "Highly precise spatial lighting setup mapping using exact clock-face positions (e.g. 2 o'clock) for light sources, exact quantities for volumetric rays, and exact shadow directions (e.g. 8 o'clock). NO physical surroundings.";
+                                if (area === 'View Background') desc = "Extremely detailed, encyclopedic description of the physical background scenery actually present in the image, including depth of field blur and atmospheric perspective mapping.";
+                                if (area === 'Temperature Tone') desc = "Precise breakdown of color grading using physical terms (e.g., 5600K daylight, photometric exposure, spectrally accurate bounce), NO abstract words like 'cinematic'.";
+                                if (area === 'View Angle & Perspective') desc = "Highly precise mathematical and geometric description: exact focal length estimation, exact camera height, lens distortion, vanishing points, and 3D spatial orientation of the viewpoint.";
+                                if (area === 'Material Texture') desc = "Micro-level description of material properties and spatial mapping of reflections/caustics based strictly on the image (e.g. 'specular highlight locked on the upper-right curve'). Exhaustively list all materials.";
+                                if (area === 'Interior Lighting') desc = "Precise clock-face mapping of practical lights, window light diffusion, realistic indirect bounce lighting, and exact shadow placement.";
+                                if (area === 'Composition' || area === 'Layout') desc = "Exhaustive breakdown of spatial arrangement. List every single object and its exact grid coordinate relationship to the primary subject to physically lock the scene layout.";
+                                if (area === 'Metadata Realism Detail') desc = "Extremely precise simulated camera metadata, including film stock simulation, ISO noise characteristics, chromatic aberration, shutter speed effects, and lens halation.";
+                                
+                                analysisProperties[key] = { type: "STRING", description: desc };
+                            });
+                        }
+
+                        const responseSchema = {
+                            type: "OBJECT",
+                            properties: {
+                                analysis: {
+                                    type: "OBJECT",
+                                    properties: analysisProperties
+                                },
+                                positive_prompt: { 
+                                    type: "STRING", 
+                                    description: "An exhaustively long, encyclopedic main text prompt strictly describing the reference image using physical deterministic wording. MUST list EVERY object and its exact spatial coordinate. Ignore length constraints. FORMATTED EXACTLY WITH THESE HEADERS: 'Core Subject:', 'Scene Composition & Geometry:', 'Exact Lighting & Atmospheric Mapping:', and 'Material & Shadow Constraints:'." 
+                                },
+                                negative_prompt: { 
+                                    type: "STRING", 
+                                    description: "A massive, comprehensive list of highly precise anti-stylization and anti-hallucination negative constraints to prevent any CGI artifacts, geometric drift, or added/removed furniture." 
+                                },
+                                generation_parameters: {
+                                    type: "OBJECT",
+                                    description: "Strict deterministic parameters to ensure absolute generation consistency and geometry lock.",
+                                    properties: {
+                                        seed: { type: "STRING", description: "A specific 10-digit random number for the Fixed Seed." },
+                                        denoise_strength: { type: "STRING", description: "Crucial for stability: Recommend '0.22' (range 0.18-0.32) for architecture/geometry lock." },
+                                        sampler_name: { type: "STRING", description: "Recommended stable sampler: 'DPM++ SDE Karras' or 'UniPC'." },
+                                        scheduler: { type: "STRING", description: "Recommended scheduler: 'Karras'." },
+                                        steps: { type: "STRING", description: "Recommended fixed step count: '35'." },
+                                        cfg: { type: "STRING", description: "Recommended low CFG scale to prevent drift: '4.5' or '5.0'." },
+                                        controlnet_stack: { type: "STRING", description: "Explicit requirement: 'Depth (1.0), Tile (0.7), SoftEdge/Canny (0.6), IPAdapter composition'" },
+                                        vae_lock: { type: "STRING", description: "Explicit instruction: 'Same VAE, same precision, same clip skip, same fp16/fp32'" },
+                                        noise_scheduling: { type: "STRING", description: "Explicit instruction: 'Disable brownian/ancestral/stochastic noise'" },
+                                        resolution: { type: "STRING", description: "Explicit instruction: 'Exact identical resolution pixel-for-pixel'" }
+                                    }
+                                }
+                            },
+                            required: ["analysis", "positive_prompt", "negative_prompt", "generation_parameters"]
+                        };
+
+                        const textPayload = {
+                            contents: [{
+                                role: "user",
+                                parts: [
+                                    { text: "Carefully analyze EVERY pixel of this specific style reference image. Ensure your JSON extraction completely relates to and accurately describes ONLY what is physically visible in this exact image. Use strict, deterministic physical terminology and avoid abstract stylistic fluff." },
+                                    { inlineData: { mimeType: state.ref.mime, data: state.ref.base64 } }
+                                ]
+                            }],
+                            systemInstruction: { parts: [{ text: systemPrompt }] },
+                            generationConfig: { responseMimeType: "application/json", responseSchema: responseSchema }
+                        };
+
+                        const urlPrompt = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+                        const textResult = await fetchWithRetry(urlPrompt, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(textPayload)
+                        });
+
+                        const generatedJSONText = textResult.candidates?.[0]?.content?.parts?.[0]?.text;
+                        if (!generatedJSONText) throw new Error("No text generated from the API.");
+                        
+                        data = JSON.parse(generatedJSONText);
+                        state.lastGeneratedJSON = JSON.stringify(data, null, 2);
+                        els.jsonOutputContent.textContent = state.lastGeneratedJSON;
+                        els.copyJsonBtn.classList.remove('hidden-important');
+                    }
+                    
+                    let extractedAnalysisText = "";
+                    if (data.analysis) {
+                        Object.entries(data.analysis).forEach(([key, value]) => {
+                            const formattedKey = key.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                            extractedAnalysisText += `- ${formattedKey}: ${value}\n`;
+                        });
+                    }
+                    
+                    const baseNegatives = "no redesign, no reinterpretation, no stylization, no decoration changes, no added furniture, no removed objects, no moving objects, no layout changes, no material replacement, no camera drift, no focal length shift, no relighting, no exposure remapping, no color grading changes, do not move lighting, do not change sun position, do not add ambient light, soft light, flat lighting, diffuse light, low contrast, DO NOT COPY REFERENCE FURNITURE, NO UNWANTED PROPS";
+                    let finalNegativePrompt = data.negative_prompt || "";
+                    finalNegativePrompt = finalNegativePrompt ? `${baseNegatives}, ${finalNegativePrompt}` : baseNegatives;
+                    if (customNegative) {
+                        finalNegativePrompt += `, ${customNegative}`;
+                    }
+
+                    let genParamsText = "";
+                    if (data.generation_parameters) {
+                        genParamsText = `[DETERMINISTIC GENERATION PIPELINE]\nFixed Seed: ${data.generation_parameters.seed || '1234567890'}\nDenoise Strength: ${data.generation_parameters.denoise_strength || '0.22'}\nSampler: ${data.generation_parameters.sampler_name || 'DPM++ SDE Karras'}\nScheduler: ${data.generation_parameters.scheduler || 'Karras'}\nSteps: ${data.generation_parameters.steps || '35'}\nCFG: ${data.generation_parameters.cfg || '5.0'}\nControlNet Stack: ${data.generation_parameters.controlnet_stack || 'Depth (1.0), Tile (0.7), SoftEdge (0.6)'}\nVAE & Precision: ${data.generation_parameters.vae_lock || 'Same VAE, same precision, same clip skip'}\nNoise Settings: ${data.generation_parameters.noise_scheduling || 'Disable brownian/ancestral/stochastic noise'}\nResolution: ${data.generation_parameters.resolution || 'Exact identical resolution'}`;
+                    }
+
+                    state.lastGeneratedPrompt = `${rulesText}\n\n[SPATIAL MAPPING & LIGHTING TEMPLATE]\n${data.positive_prompt || ""}\n\n[NEGATIVE CONSTRAINTS]\nAvoid: ${finalNegativePrompt}\n\n[EXTRACTED SEED-LOCKING DATA FROM REFERENCE]\n${extractedAnalysisText.trim()}\n\n${genParamsText}`;
+
+                    els.outContent.textContent = state.lastGeneratedPrompt;
+                    els.copyBtn.classList.remove('hidden-important');
+                    activePrompt = state.lastGeneratedPrompt;
+                } else {
+                    activePrompt = els.outContent.innerText || state.lastGeneratedPrompt;
+                }
+
+                const includePrompt = els.usePromptToggle.checked;
+                const includeJson = els.useJsonToggle.checked;
+                
+                let combinedInstructions = "";
+                if (includePrompt) {
+                    combinedInstructions += `[TEXT INSTRUCTIONS]\n${activePrompt}\n\n`;
+                }
+                if (includeJson) {
+                    combinedInstructions += `[RAW JSON ANALYSIS]\n${els.jsonOutputContent.innerText || state.lastGeneratedJSON}\n\n`;
+                }
+                if (!includePrompt && !includeJson) {
+                    combinedInstructions = "[Perform standard image enhancement matching the reference style.]";
+                }
+
+                let phase2Status = "Applying extracted style to original image...";
+                if (!includePrompt && !includeJson) phase2Status = "Generating image without specific text prompts...";
+                else if (isPromptLocked || isJsonLocked) phase2Status = "Applying locked parameters to original image...";
+                
+                setUIProcessingState(true, phase2Status);
+                
+                const origTextBase = isPerspectiveChange 
+                    ? "Here is the ORIGINAL IMAGE (Extract the subject, colors, and materials from this, but OVERRIDE its camera angle completely):" 
+                    : "Here is the ORIGINAL IMAGE (Maintain its structural base and geometry EXACTLY pixel-for-pixel):";
+                    
+                const refTextBase = isPerspectiveChange
+                    ? "Here is the REFERENCE IMAGE (You MUST match this exact 3D camera angle, focal length, and spatial perspective):"
+                    : "Here is the REFERENCE IMAGE (Extract style, lighting, or textures from this):";
+
+                const baseInstruction = isPerspectiveChange
+                    ? "You are an expert AI image editor. CRITICAL TASK: You must completely change the camera angle and perspective of the 'ORIGINAL IMAGE' subject to match the 'REFERENCE IMAGE'. The subject's exact materials, colors, and identity must be strictly preserved but viewed from the new angle."
+                    : "You are a deterministic rendering engine. CRITICAL TASK: You MUST redraw the 'ORIGINAL IMAGE' by transferring the style of the 'REFERENCE IMAGE'. YOU ARE STRICTLY FORBIDDEN from adding, removing, shifting, or duplicating ANY objects, furniture, or architectural elements from the 'ORIGINAL IMAGE'. You must act as a 1-to-1 pixel structural lock.";
+
+                let aspectInstruction = "";
+                if (currentAspect === 'original') {
+                    if (state.orig.width && state.orig.height) {
+                        const orientationName = state.orig.width > state.orig.height ? "Landscape" : (state.orig.width < state.orig.height ? "Portrait" : "Square");
+                        aspectInstruction = `\n\n[OUTPUT FORMAT]\nCRITICAL: The output image MUST strictly be generated in the EXACT same aspect ratio as the ORIGINAL IMAGE (${state.orig.width}x${state.orig.height}, ${orientationName}). Frame the composition appropriately for this shape.`;
+                    } else {
+                        aspectInstruction = `\n\n[OUTPUT FORMAT]\nCRITICAL: The output image MUST strictly be generated in the exact same aspect ratio as the ORIGINAL IMAGE.`;
+                    }
+                } else {
+                    const parts = currentAspect.split(':');
+                    const width = parseInt(parts[0]);
+                    const height = parseInt(parts[1]);
+                    const orientationName = width > height ? "Landscape" : "Portrait";
+                    
+                    aspectInstruction = `\n\n[OUTPUT FORMAT]\nCRITICAL: The output image MUST strictly be generated in a ${currentAspect} aspect ratio (${orientationName}). Frame the composition appropriately for this shape.`;
+                }
+
+                const finalBaseInstruction = baseInstruction + aspectInstruction;
+
+                const imagePayload = {
+                    contents: [{
+                        role: "user",
+                        parts: [
+                            { text: finalBaseInstruction + "\n\nFollow these explicit instructions to define what you transfer and what you keep unchanged:\n\n" + combinedInstructions + "\n\n" + origTextBase },
+                            { inlineData: { mimeType: state.orig.mime, data: state.orig.base64 } },
+                            { text: refTextBase },
+                            { inlineData: { mimeType: state.ref.mime, data: state.ref.base64 } }
+                        ]
+                    }],
+                    generationConfig: {
+                        responseModalities: ["IMAGE"]
+                    }
+                };
+
+                const urlImage = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${apiKey}`;
+                const imageResult = await fetchWithRetry(urlImage, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(imagePayload)
+                });
+
+                const generatedImageBase64 = imageResult.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData?.data;
+                
+                if (generatedImageBase64) {
+                    els.genImage.src = `data:image/jpeg;base64,${generatedImageBase64}`;
+                    els.genImage.classList.remove('hidden-important');
+                    els.resultActions.classList.remove('hidden-important');
+                } else {
+                    throw new Error("The AI failed to generate an image response.");
+                }
+
+            } catch (err) {
+                showError(`Failed during generation pipeline: ${err.message}. Please try again.`);
+                els.outEmpty.classList.remove('hidden-important');
+            } finally {
+                setUIProcessingState(false);
+            }
+        });
+
+        // Reset App State
+        els.resetBtn.addEventListener('click', () => {
+            if (state.isGenerating) return;
+
+            state.orig = { base64: null, mime: null, width: null, height: null };
+            state.ref = { base64: null, mime: null, width: null, height: null };
+            state.lastGeneratedPrompt = '';
+            state.lastGeneratedJSON = '';
+            
+            ['orig', 'ref'].forEach(type => {
+                els[type].input.value = '';
+                els[type].previewImg.src = '';
+                els[type].previewCont.classList.add('hidden-important');
+                els[type].placeholder.classList.remove('hidden-important');
+            });
+
+            selectedFocuses.clear();
+            els.focusCont.innerHTML = '';
+            focusAreas.length = 0;
+            focusAreas.push('Environment', 'Interior Lighting', 'Material Texture', 'Composition', 'Layout', 'View Angle & Perspective', 'View Background', 'Temperature Tone', 'Metadata Realism Detail');
+            focusAreas.forEach(area => createFocusChip(area));
+
+            els.customFocusInput.value = '';
+            els.customNegativeInput.value = '';
+            
+            const defaultAspectBtn = Array.from(els.aspectBtns).find(btn => btn.dataset.aspect === 'original');
+            if(defaultAspectBtn) defaultAspectBtn.click();
+
+            els.lockPromptToggle.checked = false;
+            els.lockJsonToggle.checked = false;
+            
+            els.usePromptToggle.checked = true;
+            els.useJsonToggle.checked = true;
+            els.promptUseOn.classList.remove('hidden-important');
+            els.promptUseOff.classList.add('hidden-important');
+            els.jsonUseOn.classList.remove('hidden-important');
+            els.jsonUseOff.classList.add('hidden-important');
+
+            els.genImage.src = '';
+            els.genImage.classList.add('hidden-important');
+            els.resultActions.classList.add('hidden-important');
+            els.outEmpty.classList.remove('hidden-important');
+            els.outLoading.classList.add('hidden-important');
+            els.outContent.textContent = 'Waiting for generation...';
+            els.jsonOutputContent.textContent = 'Waiting for analysis...';
+            els.copyBtn.classList.add('hidden-important');
+            els.copyJsonBtn.classList.add('hidden-important');
+            hideError();
+            updateGenerateBtnState();
+        });
+
+        // Copy to Clipboard
+        els.copyBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const currentPrompt = els.outContent.innerText;
+            if (!currentPrompt || currentPrompt === 'Waiting for generation...') return;
+            
+            const textArea = document.createElement("textarea");
+            textArea.value = currentPrompt;
+            document.body.appendChild(textArea);
+            textArea.select();
+            
+            try {
+                document.execCommand('copy');
+                els.copyIcon.classList.add('hidden-important');
+                els.checkIcon.classList.remove('hidden-important');
+                els.copyText.textContent = "Copied!";
+                
+                setTimeout(() => {
+                    els.copyIcon.classList.remove('hidden-important');
+                    els.checkIcon.classList.add('hidden-important');
+                    els.copyText.textContent = "Copy Prompt";
+                }, 2000);
+            } catch (err) {
+                console.error('Failed to copy text: ', err);
+            }
+            document.body.removeChild(textArea);
+        });
+
+        // Copy JSON to Clipboard
+        els.copyJsonBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const currentJSON = els.jsonOutputContent.innerText;
+            if (!currentJSON || currentJSON === 'Waiting for analysis...') return;
+            
+            const textArea = document.createElement("textarea");
+            textArea.value = currentJSON;
+            document.body.appendChild(textArea);
+            textArea.select();
+            
+            try {
+                document.execCommand('copy');
+                els.copyJsonIcon.classList.add('hidden-important');
+                els.checkJsonIcon.classList.remove('hidden-important');
+                els.copyJsonText.textContent = "Copied!";
+                
+                setTimeout(() => {
+                    els.copyJsonIcon.classList.remove('hidden-important');
+                    els.checkJsonIcon.classList.add('hidden-important');
+                    els.copyJsonText.textContent = "Copy JSON";
+                }, 2000);
+            } catch (err) {
+                console.error('Failed to copy text: ', err);
+            }
+            document.body.removeChild(textArea);
+        });
+
+        // Launch Re-imager Overlay Logic
+        const launchReimager = () => {
+            const activeImgSrc = els.genImage.src;
+            if (!activeImgSrc || activeImgSrc.includes('Waiting') || activeImgSrc === window.location.href) {
+                return;
+            }
+            
+            // Open Re-imager Modal
+            const reimagerModal = document.getElementById('reimager-modal');
+            reimagerModal.classList.remove('hidden-important', 'hidden');
+            reimagerModal.classList.add('flex');
+            
+            // Auto-hide compare lightbox modal if open
+            els.zoomModal.classList.add('hidden-important');
+            document.body.style.overflow = '';
+            
+            // Set newly generated layout directly as Re-imager's Source Image
+            setReimagerSourceImage(activeImgSrc);
+        };
+
+        els.actionReimageBtn.addEventListener('click', launchReimager);
+        els.modalLaunchReimagerBtn.addEventListener('click', launchReimager);
+
+        document.getElementById('reimager-close-btn').addEventListener('click', () => {
+            const reimagerModal = document.getElementById('reimager-modal');
+            reimagerModal.classList.add('hidden-important');
+            reimagerModal.classList.remove('flex');
+        });
+    </script>
+
+    <!-- ==================== RE-IMAGER EMBEDDED JAVASCRIPT LOGIC ==================== -->
+    <script>
+        let rState = {
+            sourceImage: null,
+            maskImage: null,
+            promptElements: {
+                style: "", viewAngle: "", ceiling: "", floor: "", walls: "", furniture: "", interiorLighting: "", environment: "", viewBackground: "", other: ""
+            },
+            materialMappings: [],
+            generatedImage: null,
+            isExtracting: false,
+            isGenerating: false,
+            isDragging: false,
+            hoveredColorHex: null
+        };
+
+        let textureDragState = {
+            active: false,
+            hex: null,
+            startX: 0,
+            startY: 0,
+            initX: 0,
+            initY: 0,
+            moved: false
+        };
+        
+        let originalMaskCanvas = null;
+
+        let editMaskState = {
+            active: false,
+            hex: null,
+            isPainting: false,
+            lastPos: null,
+            tool: 'brush',
+            mode: 'add',
+            brushSize: 20,
+            wandTol: 30,
+            sourceCtx: null,
+            maskCtx: null,
+            displayCanvas: null,
+            displayCtx: null,
+            mouseX: null,
+            mouseY: null,
+            mouseInside: false
+        };
+
+        const PIXEL_MATCH_TOLERANCE = 40; 
+        let cropper = null;
+        let currentCropIndex = null;
+
+        // Re-imager Dom Mappings
+        const rEls = {
+            fileInput: document.getElementById('reimagerFileInput'),
+            dropZone: document.getElementById('reimagerDropZone'),
+            sourcePreview: document.getElementById('reimagerSourcePreview'),
+            emptySource: document.getElementById('reimagerEmptySource'),
+            uploadIcon: document.getElementById('reimagerUploadIcon'),
+            dropText: document.getElementById('reimagerDropText'),
+            highlightOverlay: document.getElementById('reimagerHighlightOverlay'),
+            highlightCtx: document.getElementById('reimagerHighlightOverlay').getContext('2d'),
+            
+            jsonLoaderOverlay: document.getElementById('reimagerJsonLoaderOverlay'),
+            jsonEditor: document.getElementById('reimagerJsonEditor'),
+            
+            maskFileInput: document.getElementById('reimagerMaskFileInput'),
+            maskDropZone: document.getElementById('reimagerMaskDropZone'),
+            maskPreview: document.getElementById('reimagerMaskPreview'),
+            emptyMask: document.getElementById('reimagerEmptyMask'),
+            maskUploadIcon: document.getElementById('reimagerMaskUploadIcon'),
+            maskDropText: document.getElementById('reimagerMaskDropText'),
+            
+            errorCont: document.getElementById('reimagerErrorContainer'),
+            errorText: document.getElementById('reimagerErrorText'),
+            
+            materialsContainer: document.getElementById('reimagerMaterialsContainer'),
+            emptyMaterialState: document.getElementById('reimagerEmptyMaterialState'),
+            
+            generateJsonBtn: document.getElementById('reimagerGenerateJsonBtn'),
+            generateMaskBtn: document.getElementById('reimagerGenerateMaskBtn'),
+            generationLoaderOverlay: document.getElementById('reimagerGenerationLoaderOverlay'),
+            generationLoaderText: document.getElementById('reimagerGenerationLoaderText'),
+            generatedPreview: document.getElementById('reimagerGeneratedPreview'),
+            emptyGenerated: document.getElementById('reimagerEmptyGenerated'), // Cached mapping now correctly restored
+            imageActions: document.getElementById('reimagerImageActions'),
+            downloadBtn: document.getElementById('reimagerDownloadBtn'),
+            openTabBtn: document.getElementById('reimagerOpenTabBtn'),
+            compareTooltip: document.getElementById('reimagerCompareTooltip'),
+            
+            hiddenMaskCanvas: document.getElementById('reimagerHiddenMaskCanvas'),
+            hiddenMaskCtx: document.getElementById('reimagerHiddenMaskCanvas').getContext('2d'),
+
+            // Mask Edit
+            maskEditModal: document.getElementById('reimagerMaskEditModal'),
+            maskEditDisplayCanvas: document.getElementById('reimagerMaskEditDisplayCanvas'),
+            toolBrush: document.getElementById('reimagerToolBrush'),
+            toolWand: document.getElementById('reimagerToolWand'),
+            modeAdd: document.getElementById('reimagerModeAdd'),
+            modeErase: document.getElementById('reimagerModeErase'),
+            brushSize: document.getElementById('reimagerBrushSize'),
+            brushSizeVal: document.getElementById('reimagerBrushSizeVal'),
+            wandTolerance: document.getElementById('reimagerWandTolerance'),
+            wandTolVal: document.getElementById('reimagerWandTolVal'),
+            brushSizeWrapper: document.getElementById('reimagerBrushSizeWrapper'),
+            wandTolWrapper: document.getElementById('reimagerWandTolWrapper'),
+            cancelMaskEditBtn: document.getElementById('reimagerCancelMaskEditBtn'),
+            saveMaskEditBtn: document.getElementById('reimagerSaveMaskEditBtn'),
+
+            // Crop
+            cropModal: document.getElementById('reimagerCropModal'),
+            cropImage: document.getElementById('reimagerCropImage'),
+            closeCropBtn: document.getElementById('reimagerCloseCropBtn'),
+            cancelCropBtn: document.getElementById('reimagerCancelCropBtn'),
+            saveCropBtn: document.getElementById('reimagerSaveCropBtn'),
+
+            // Comparison Slider
+            compareModal: document.getElementById('reimagerCompareModal'),
+            compareBeforeImg: document.getElementById('reimagerCompareBeforeImg'),
+            compareAfterImg: document.getElementById('reimagerCompareAfterImg'),
+            compareAfterWrapper: document.getElementById('reimagerCompareAfterWrapper'),
+            compareSliderLine: document.getElementById('reimagerCompareSliderLine'),
+            compareSliderInput: document.getElementById('reimagerCompareSliderInput'),
+            closeCompareBtn: document.getElementById('reimagerCloseCompareBtn')
+        };
+
+        const showReimagerError = (msg) => {
+            if (msg) {
+                rEls.errorText.textContent = msg;
+                rEls.errorCont.classList.remove('hidden');
+            } else {
+                rEls.errorCont.classList.add('hidden');
+            }
+        };
+
+        const rgbToHex = (r, g, b) => '#' + [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('').toUpperCase();
+        
+        const hexToRgb = (hex) => {
+            const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+            return result ? { r: parseInt(result[1], 16), g: parseInt(result[2], 16), b: parseInt(result[3], 16) } : null;
+        };
+
+        const colorDist = (r1, g1, b1, r2, g2, b2) => Math.sqrt((r1-r2)**2 + (g1-g2)**2 + (b1-b2)**2);
+
+        // Tool Selection
+        [rEls.toolBrush, rEls.toolWand].forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                editMaskState.tool = e.target.value;
+                if (editMaskState.tool === 'brush') {
+                    rEls.brushSizeWrapper.classList.remove('opacity-50', 'pointer-events-none');
+                    rEls.wandTolWrapper.classList.add('opacity-50', 'pointer-events-none');
+                } else {
+                    rEls.brushSizeWrapper.classList.add('opacity-50', 'pointer-events-none');
+                    rEls.wandTolWrapper.classList.remove('opacity-50', 'pointer-events-none');
+                }
+                updateMaskEditDisplay();
+            });
+        });
+
+        [rEls.modeAdd, rEls.modeErase].forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                editMaskState.mode = e.target.value;
+                updateMaskEditDisplay();
+            });
+        });
+
+        rEls.brushSize.addEventListener('input', (e) => {
+            editMaskState.brushSize = parseInt(e.target.value, 10);
+            rEls.brushSizeVal.textContent = e.target.value;
+            updateMaskEditDisplay();
+        });
+
+        rEls.wandTolerance.addEventListener('input', (e) => {
+            editMaskState.wandTol = parseInt(e.target.value, 10);
+            rEls.wandTolVal.textContent = e.target.value;
+        });
+
+        const openMaskEditor = (hex) => {
+            const mapping = rState.materialMappings.find(m => m.hex === hex);
+            if (!mapping || !rState.sourceImage) return;
+
+            editMaskState.active = true;
+            editMaskState.hex = hex;
+            
+            const w = rEls.hiddenMaskCanvas.width;
+            const h = rEls.hiddenMaskCanvas.height;
+            
+            const srcCanvas = document.createElement('canvas');
+            srcCanvas.width = w; srcCanvas.height = h;
+            editMaskState.sourceCtx = srcCanvas.getContext('2d', { willReadFrequently: true });
+            if (originalMaskCanvas) {
+                editMaskState.sourceCtx.drawImage(originalMaskCanvas, 0, 0, w, h);
+            } else {
+                editMaskState.sourceCtx.drawImage(rEls.sourcePreview, 0, 0, w, h);
+            }
+
+            const maskCanvas = document.createElement('canvas');
+            maskCanvas.width = w; maskCanvas.height = h;
+            editMaskState.maskCtx = maskCanvas.getContext('2d', { willReadFrequently: true });
+            editMaskState.maskCtx.drawImage(mapping.canvas, 0, 0);
+
+            rEls.maskEditDisplayCanvas.width = w;
+            rEls.maskEditDisplayCanvas.height = h;
+            editMaskState.displayCtx = rEls.maskEditDisplayCanvas.getContext('2d');
+
+            updateMaskEditDisplay();
+            rEls.maskEditModal.classList.remove('hidden');
+            rEls.maskEditModal.classList.add('flex');
+        };
+
+        const closeMaskEditor = () => {
+            editMaskState.active = false;
+            rEls.maskEditModal.classList.add('hidden');
+            rEls.maskEditModal.classList.remove('flex');
+        };
+
+        const updateMaskEditDisplay = () => {
+            if (!editMaskState.active) return;
+            const w = rEls.maskEditDisplayCanvas.width;
+            const h = rEls.maskEditDisplayCanvas.height;
+            const ctx = editMaskState.displayCtx;
+
+            ctx.clearRect(0, 0, w, h);
+            ctx.drawImage(rEls.sourcePreview, 0, 0, w, h);
+            
+            const rgb = hexToRgb(editMaskState.hex);
+            const temp = document.createElement('canvas');
+            temp.width = w; temp.height = h;
+            const tCtx = temp.getContext('2d');
+            
+            tCtx.drawImage(editMaskState.maskCtx.canvas, 0, 0);
+            tCtx.globalCompositeOperation = 'source-in';
+            tCtx.fillStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.6)`;
+            tCtx.fillRect(0, 0, w, h);
+            
+            ctx.drawImage(temp, 0, 0);
+
+            if (editMaskState.tool === 'brush' && editMaskState.mouseInside && editMaskState.mouseX !== null && editMaskState.mouseY !== null) {
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(editMaskState.mouseX, editMaskState.mouseY, editMaskState.brushSize / 2, 0, Math.PI * 2);
+                ctx.lineWidth = 2.5;
+                ctx.strokeStyle = '#ffffff';
+                ctx.stroke();
+                ctx.lineWidth = 1;
+                ctx.strokeStyle = '#000000';
+                ctx.stroke();
+                ctx.restore();
+            }
+        };
+
+        const executeMagicWand = (startX, startY, isAdding) => {
+            const w = rEls.maskEditDisplayCanvas.width;
+            const h = rEls.maskEditDisplayCanvas.height;
+            const tol = editMaskState.wandTol;
+            
+            const srcDataObj = editMaskState.sourceCtx.getImageData(0, 0, w, h);
+            const sData = srcDataObj.data;
+            const maskDataObj = editMaskState.maskCtx.getImageData(0, 0, w, h);
+            const mData = maskDataObj.data;
+
+            const tPos = (startY * w + startX) * 4;
+            const tR = sData[tPos], tG = sData[tPos+1], tB = sData[tPos+2], tA = sData[tPos+3];
+            
+            if (tA === 0) return;
+            
+            const visited = new Uint8Array(w * h);
+            const stackX = [startX];
+            const stackY = [startY];
+            const fillVal = isAdding ? 255 : 0;
+
+            while(stackX.length > 0) {
+                const x = stackX.pop();
+                const y = stackY.pop();
+                const pos = y * w + x;
+                
+                if (visited[pos]) continue;
+                visited[pos] = 1;
+                
+                const i = pos * 4;
+                const r = sData[i], g = sData[i+1], b = sData[i+2], a = sData[i+3];
+                const dist = Math.sqrt((r-tR)**2 + (g-tG)**2 + (b-tB)**2);
+                
+                if (dist <= tol && a > 128) {
+                    mData[i] = fillVal; mData[i+1] = fillVal; mData[i+2] = fillVal; mData[i+3] = fillVal;
+                    if(x > 0) { stackX.push(x-1); stackY.push(y); }
+                    if(x < w-1) { stackX.push(x+1); stackY.push(y); }
+                    if(y > 0) { stackX.push(x); stackY.push(y-1); }
+                    if(y < h-1) { stackX.push(x); stackY.push(y+1); }
+                }
+            }
+            editMaskState.maskCtx.putImageData(maskDataObj, 0, 0);
+        };
+
+        rEls.maskEditDisplayCanvas.addEventListener('mouseenter', () => {
+            editMaskState.mouseInside = true;
+            updateMaskEditDisplay();
+        });
+
+        rEls.maskEditDisplayCanvas.addEventListener('mouseleave', () => {
+            editMaskState.mouseInside = false;
+            editMaskState.isPainting = false;
+            editMaskState.lastPos = null;
+            updateMaskEditDisplay();
+        });
+
+        rEls.maskEditDisplayCanvas.addEventListener('mousedown', (e) => {
+            if (!editMaskState.active) return;
+            
+            const rect = rEls.maskEditDisplayCanvas.getBoundingClientRect();
+            const scaleX = rEls.maskEditDisplayCanvas.width / rect.width;
+            const scaleY = rEls.maskEditDisplayCanvas.height / rect.height;
+            const x = Math.floor((e.clientX - rect.left) * scaleX);
+            const y = Math.floor((e.clientY - rect.top) * scaleY);
+            
+            let isAdding = editMaskState.mode === 'add';
+            if (e.altKey) isAdding = !isAdding;
+
+            if (editMaskState.tool === 'wand') {
+                executeMagicWand(x, y, isAdding);
+                updateMaskEditDisplay();
+            } else if (editMaskState.tool === 'brush') {
+                editMaskState.isPainting = true;
+                editMaskState.lastPos = null;
+                drawBrush(x, y, isAdding);
+            }
+        });
+
+        const drawBrush = (x, y, isAdding) => {
+            const ctx = editMaskState.maskCtx;
+            ctx.beginPath();
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.lineWidth = editMaskState.brushSize;
+
+            if (isAdding) {
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.strokeStyle = 'white';
+                ctx.fillStyle = 'white';
+            } else {
+                ctx.globalCompositeOperation = 'destination-out';
+                ctx.strokeStyle = 'rgba(0,0,0,1)';
+                ctx.fillStyle = 'rgba(0,0,0,1)';
+            }
+
+            if (editMaskState.lastPos) {
+                ctx.moveTo(editMaskState.lastPos.x, editMaskState.lastPos.y);
+                ctx.lineTo(x, y);
+                ctx.stroke();
+            } else {
+                ctx.arc(x, y, editMaskState.brushSize / 2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            editMaskState.lastPos = { x, y };
+            updateMaskEditDisplay();
+        };
+
+        rEls.maskEditDisplayCanvas.addEventListener('mousemove', (e) => {
+            if (!editMaskState.active) return;
+            const rect = rEls.maskEditDisplayCanvas.getBoundingClientRect();
+            const scaleX = rEls.maskEditDisplayCanvas.width / rect.width;
+            const scaleY = rEls.maskEditDisplayCanvas.height / rect.height;
+            const x = Math.floor((e.clientX - rect.left) * scaleX);
+            const y = Math.floor((e.clientY - rect.top) * scaleY);
+            
+            editMaskState.mouseX = x;
+            editMaskState.mouseY = y;
+            
+            if (editMaskState.isPainting) {
+                let isAdding = editMaskState.mode === 'add';
+                if (e.altKey) isAdding = !isAdding;
+                drawBrush(x, y, isAdding);
+            } else {
+                updateMaskEditDisplay();
+            }
+        });
+
+        rEls.cancelMaskEditBtn.addEventListener('click', closeMaskEditor);
+        
+        rEls.saveMaskEditBtn.addEventListener('click', () => {
+            const mapping = rState.materialMappings.find(m => m.hex === editMaskState.hex);
+            if (!mapping) return;
+
+            const mCtx = mapping.canvas.getContext('2d');
+            mCtx.clearRect(0, 0, mapping.canvas.width, mapping.canvas.height);
+            mCtx.drawImage(editMaskState.maskCtx.canvas, 0, 0);
+
+            const w = rEls.hiddenMaskCanvas.width;
+            const h = rEls.hiddenMaskCanvas.height;
+            
+            rEls.hiddenMaskCtx.clearRect(0,0,w,h);
+            if (originalMaskCanvas) {
+                rEls.hiddenMaskCtx.drawImage(originalMaskCanvas, 0, 0);
+            }
+            const masterData = rEls.hiddenMaskCtx.getImageData(0,0,w,h);
+            
+            rState.materialMappings.forEach(m => {
+                const targetRgb = hexToRgb(m.hex);
+                for (let i=0; i<masterData.data.length; i+=4) {
+                    if (masterData.data[i+3] > 128) {
+                        if (colorDist(masterData.data[i], masterData.data[i+1], masterData.data[i+2], targetRgb.r, targetRgb.g, targetRgb.b) < PIXEL_MATCH_TOLERANCE) {
+                            masterData.data[i+3] = 0;
+                        }
+                    }
+                }
+            });
+            rEls.hiddenMaskCtx.putImageData(masterData, 0, 0);
+            
+            rState.materialMappings.forEach(m => {
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = w; tempCanvas.height = h;
+                const tCtx = tempCanvas.getContext('2d');
+                
+                tCtx.drawImage(m.canvas, 0, 0);
+                tCtx.globalCompositeOperation = 'source-in';
+                tCtx.fillStyle = m.hex;
+                tCtx.fillRect(0,0,w,h);
+                
+                rEls.hiddenMaskCtx.globalCompositeOperation = 'source-over';
+                rEls.hiddenMaskCtx.drawImage(tempCanvas, 0, 0);
+            });
+            
+            rState.maskImage = rEls.hiddenMaskCanvas.toDataURL('image/png');
+            rEls.maskPreview.src = rState.maskImage;
+            
+            closeMaskEditor();
+        });
+
+        // Cropper Logic
+        const closeCropModal = () => {
+            rEls.cropModal.classList.add('hidden');
+            rEls.cropModal.classList.remove('flex');
+            if (cropper) {
+                cropper.destroy();
+                cropper = null;
+            }
+            currentCropIndex = null;
+        };
+
+        rEls.closeCropBtn.addEventListener('click', closeCropModal);
+        rEls.cancelCropBtn.addEventListener('click', closeCropModal);
+
+        rEls.saveCropBtn.addEventListener('click', () => {
+            if (!cropper || currentCropIndex === null) return;
+            const canvas = cropper.getCroppedCanvas();
+            if (!canvas) return;
+            
+            const b64 = canvas.toDataURL('image/jpeg', 0.9);
+            const index = currentCropIndex;
+            
+            rState.materialMappings[index].texture = b64;
+            rState.materialMappings[index].textureScale = 1.0;
+            rState.materialMappings[index].textureOffsetX = 0;
+            rState.materialMappings[index].textureOffsetY = 0;
+            rState.materialMappings[index].textureGlossiness = 0.5;
+            rState.materialMappings[index].textureBump = 0.5;
+            
+            rState.materialMappings[index].scaleEnabled = false;
+            rState.materialMappings[index].glossEnabled = false;
+            rState.materialMappings[index].bumpEnabled = false;
+            
+            const img = new Image();
+            img.onload = () => {
+                rState.materialMappings[index].textureImg = img;
+                renderMaterials();
+                validateAndUpdateReimagerBtns();
+                
+                if (rState.hoveredColorHex === rState.materialMappings[index].hex) {
+                    activateReimagerHighlight(rState.materialMappings[index].hex);
+                }
+            };
+            img.src = b64;
+            closeCropModal();
+        });
+
+        // Before / After Slider
+        rEls.compareSliderInput.addEventListener('input', (e) => {
+            const value = e.target.value;
+            rEls.compareAfterWrapper.style.clipPath = `polygon(0 0, ${value}% 0, ${value}% 100%, 0 100%)`;
+            rEls.compareSliderLine.style.left = `${value}%`;
+        });
+
+        rEls.generatedPreview.addEventListener('click', () => {
+            if (rState.generatedImage && rState.sourceImage) {
+                rEls.compareBeforeImg.src = rState.sourceImage;
+                rEls.compareAfterImg.src = rState.generatedImage;
+                rEls.compareSliderInput.value = 50;
+                rEls.compareAfterWrapper.style.clipPath = 'polygon(0 0, 50% 0, 50% 100%, 0 100%)';
+                rEls.compareSliderLine.style.left = '50%';
+                
+                rEls.compareModal.classList.remove('hidden');
+                rEls.compareModal.classList.add('flex');
+            }
+        });
+
+        rEls.closeCompareBtn.addEventListener('click', () => {
+            rEls.compareModal.classList.add('hidden');
+            rEls.compareModal.classList.remove('flex');
+        });
+
+        const validateAndUpdateReimagerBtns = () => {
+            let hasGeneralContent = false;
+            try {
+                const parsed = JSON.parse(rEls.jsonEditor.value);
+                hasGeneralContent = Object.values(parsed).some(val => val && String(val).trim().length > 0);
+                rEls.jsonEditor.classList.remove('border-red-500');
+                rState.promptElements = parsed;
+            } catch (e) {
+                rEls.jsonEditor.classList.add('border-red-500');
+            }
+            
+            const hasMaterialContent = rState.materialMappings.some(m => m.texture || m.regionName);
+            
+            rEls.generateJsonBtn.disabled = !hasGeneralContent || rState.isGenerating || rEls.jsonEditor.classList.contains('border-red-500');
+            rEls.generateMaskBtn.disabled = !hasMaterialContent || !rState.maskImage || rState.isGenerating;
+        };
+
+        rEls.jsonEditor.addEventListener('input', validateAndUpdateReimagerBtns);
+
+        const getProcessedTexture = (mapping) => {
+            const scale = mapping.scaleEnabled ? (mapping.textureScale || 1.0) : 1.0;
+            const offsetX = mapping.textureOffsetX || 0;
+            const offsetY = mapping.textureOffsetY || 0;
+
+            const canvas = document.createElement('canvas');
+            canvas.width = 1024; canvas.height = 1024;
+            const ctx = canvas.getContext('2d');
+
+            const pattern = ctx.createPattern(mapping.textureImg, 'repeat');
+            const matrix = new DOMMatrix().translate(offsetX, offsetY).scale(scale);
+            pattern.setTransform(matrix);
+            ctx.fillStyle = pattern;
+            ctx.fillRect(0, 0, 1024, 1024);
+
+            return canvas.toDataURL('image/jpeg', 0.9);
+        };
+
+        const renderMaterials = () => {
+            if (rState.materialMappings.length === 0) {
+                rEls.materialsContainer.innerHTML = '';
+                rEls.materialsContainer.appendChild(rEls.emptyMaterialState);
+                return;
+            }
+            
+            rEls.materialsContainer.innerHTML = '';
+
+            rState.materialMappings.forEach((mapping, index) => {
+                const row = document.createElement('div');
+                row.className = 'material-row flex flex-col space-y-1 bg-neutral-800/40 p-2 rounded-lg border border-neutral-700';
+                row.id = `re-material-row-${mapping.hex.substring(1)}`;
+                
+                row.innerHTML = `
+                    <div class="flex items-start space-x-2 w-full">
+                        <div class="w-6 h-6 mt-1 rounded border border-neutral-600 shadow-inner flex-shrink-0" style="background-color: ${mapping.hex};" title="Color: ${mapping.hex}"></div>
+                        <div class="flex-grow flex flex-col space-y-2">
+                            <div class="flex items-center space-x-2">
+                                <input type="text" class="region-input flex-grow p-1.5 bg-neutral-900 text-xs text-neutral-200 rounded border border-neutral-700 focus:border-blue-500 focus:outline-none placeholder-neutral-500" placeholder="Region name..." value="${mapping.regionName}">
+                                
+                                <button class="edit-mask p-1.5 text-blue-400 hover:bg-neutral-700 rounded transition border border-transparent hover:border-blue-900/50" data-index="${index}" title="Edit Boundary">
+                                    <i data-lucide="pen" class="w-4 h-4"></i>
+                                </button>
+                                
+                                <label class="cursor-pointer w-8 h-8 bg-neutral-700 hover:bg-neutral-600 text-neutral-300 rounded transition flex items-center justify-center flex-shrink-0 border border-neutral-600 relative group overflow-hidden" title="Upload Texture">
+                                    ${mapping.texture ? `<img src="${mapping.texture}" class="w-full h-full object-cover" />` : `<i data-lucide="upload-cloud" class="w-4 h-4 text-neutral-400 group-hover:text-white"></i>`}
+                                    <input type="file" class="hidden texture-upload" accept="image/*" data-index="${index}">
+                                </label>
+                                
+                                ${mapping.texture ? `
+                                <button class="remove-texture p-1.5 text-red-400 hover:bg-neutral-700 rounded transition border border-transparent hover:border-red-900/50" data-index="${index}">
+                                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                </button>` : ''}
+                            </div>
+                            
+                            ${mapping.texture ? `
+                            <div class="flex flex-col space-y-1.5 w-full pt-1">
+                                <div class="flex items-center space-x-2 bg-neutral-900/50 p-1.5 rounded border border-neutral-700/50 ${mapping.scaleEnabled ? 'opacity-100' : 'opacity-60'} transition">
+                                    <input type="checkbox" class="toggle-checkbox scale-toggle" ${mapping.scaleEnabled ? 'checked' : ''}>
+                                    <i data-lucide="maximize" class="w-3 h-3 text-neutral-500"></i>
+                                    <span class="text-[10px] text-neutral-400 font-medium w-8">Scale</span>
+                                    <input type="range" class="texture-scale flex-grow h-1 bg-neutral-700 rounded-lg appearance-none cursor-pointer" min="0.1" max="5" step="0.1" value="${mapping.textureScale || 1.0}" ${!mapping.scaleEnabled ? 'disabled' : ''}>
+                                    <span class="text-[10px] text-blue-400 font-mono w-6 text-right scale-val">${Number(mapping.textureScale || 1).toFixed(1)}x</span>
+                                </div>
+                                <div class="flex items-center space-x-2 bg-neutral-900/50 p-1.5 rounded border border-neutral-700/50 ${mapping.glossEnabled ? 'opacity-100' : 'opacity-60'} transition">
+                                    <input type="checkbox" class="toggle-checkbox gloss-toggle" ${mapping.glossEnabled ? 'checked' : ''}>
+                                    <i data-lucide="sun" class="w-3 h-3 text-neutral-500"></i>
+                                    <span class="text-[10px] text-neutral-400 font-medium w-8">Gloss</span>
+                                    <input type="range" class="texture-glossiness flex-grow h-1 bg-neutral-700 rounded-lg appearance-none cursor-pointer" min="0" max="1" step="0.1" value="${mapping.textureGlossiness !== undefined ? mapping.textureGlossiness : 0.5}" ${!mapping.glossEnabled ? 'disabled' : ''}>
+                                    <span class="text-[10px] text-blue-400 font-mono w-6 text-right gloss-val">${Number(mapping.textureGlossiness !== undefined ? mapping.textureGlossiness : 0.5).toFixed(1)}</span>
+                                </div>
+                                <div class="flex items-center space-x-2 bg-neutral-900/50 p-1.5 rounded border border-neutral-700/50 ${mapping.bumpEnabled ? 'opacity-100' : 'opacity-60'} transition">
+                                    <input type="checkbox" class="toggle-checkbox bump-toggle" ${mapping.bumpEnabled ? 'checked' : ''}>
+                                    <i data-lucide="mountain-snow" class="w-3 h-3 text-neutral-500"></i>
+                                    <span class="text-[10px] text-neutral-400 font-medium w-8">Bump</span>
+                                    <input type="range" class="texture-bump flex-grow h-1 bg-neutral-700 rounded-lg appearance-none cursor-pointer" min="0" max="1" step="0.1" value="${mapping.textureBump !== undefined ? mapping.textureBump : 0.5}" ${!mapping.bumpEnabled ? 'disabled' : ''}>
+                                    <span class="text-[10px] text-blue-400 font-mono w-6 text-right bump-val">${Number(mapping.textureBump !== undefined ? mapping.textureBump : 0.5).toFixed(1)}</span>
+                                </div>
+                            </div>` : ''}
+                        </div>
+                    </div>
+                `;
+
+                const regionInput = row.querySelector('.region-input');
+                regionInput.addEventListener('input', (e) => {
+                    rState.materialMappings[index].regionName = e.target.value;
+                    validateAndUpdateReimagerBtns();
+                });
+
+                const editMaskBtn = row.querySelector('.edit-mask');
+                if (editMaskBtn) {
+                    editMaskBtn.addEventListener('click', () => openMaskEditor(mapping.hex));
+                }
+
+                const fileInput = row.querySelector('.texture-upload');
+                fileInput.addEventListener('change', async (e) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                        try {
+                            const b64 = await fileToBase64(file);
+                            currentCropIndex = index;
+                            
+                            rEls.cropImage.src = b64;
+                            rEls.cropModal.classList.remove('hidden');
+                            rEls.cropModal.classList.add('flex');
+                            
+                            setTimeout(() => {
+                                cropper = new Cropper(rEls.cropImage, {
+                                    viewMode: 1,
+                                    autoCropArea: 1,
+                                    background: false
+                                });
+                            }, 50);
+                        } catch(err) { showReimagerError("Failed to load texture for cropping."); }
+                        e.target.value = '';
+                    }
+                });
+
+                const scaleToggle = row.querySelector('.scale-toggle');
+                const scaleInput = row.querySelector('.texture-scale');
+                if (scaleToggle && scaleInput) {
+                    scaleToggle.addEventListener('change', (e) => {
+                        rState.materialMappings[index].scaleEnabled = e.target.checked;
+                        renderMaterials();
+                        if (rState.hoveredColorHex === mapping.hex) activateReimagerHighlight(mapping.hex);
+                        validateAndUpdateReimagerBtns();
+                    });
+                    scaleInput.addEventListener('input', (e) => {
+                        const val = parseFloat(e.target.value);
+                        rState.materialMappings[index].textureScale = val;
+                        row.querySelector('.scale-val').textContent = val.toFixed(1) + 'x';
+                        if (rState.hoveredColorHex === mapping.hex) activateReimagerHighlight(mapping.hex);
+                    });
+                }
+
+                const glossToggle = row.querySelector('.gloss-toggle');
+                const glossInput = row.querySelector('.texture-glossiness');
+                if (glossToggle && glossInput) {
+                    glossToggle.addEventListener('change', (e) => {
+                        rState.materialMappings[index].glossEnabled = e.target.checked;
+                        renderMaterials();
+                        validateAndUpdateReimagerBtns();
+                    });
+                    glossInput.addEventListener('input', (e) => {
+                        const val = parseFloat(e.target.value);
+                        rState.materialMappings[index].textureGlossiness = val;
+                        row.querySelector('.gloss-val').textContent = val.toFixed(1);
+                        validateAndUpdateReimagerBtns();
+                    });
+                }
+
+                const bumpToggle = row.querySelector('.bump-toggle');
+                const bumpInput = row.querySelector('.texture-bump');
+                if (bumpToggle && bumpInput) {
+                    bumpToggle.addEventListener('change', (e) => {
+                        rState.materialMappings[index].bumpEnabled = e.target.checked;
+                        renderMaterials();
+                        validateAndUpdateReimagerBtns();
+                    });
+                    bumpInput.addEventListener('input', (e) => {
+                        const val = parseFloat(e.target.value);
+                        rState.materialMappings[index].textureBump = val;
+                        row.querySelector('.bump-val').textContent = val.toFixed(1);
+                        validateAndUpdateReimagerBtns();
+                    });
+                }
+
+                const removeBtn = row.querySelector('.remove-texture');
+                if (removeBtn) {
+                    removeBtn.addEventListener('click', () => {
+                        rState.materialMappings[index].texture = null;
+                        rState.materialMappings[index].textureImg = null;
+                        rState.materialMappings[index].textureScale = 1.0;
+                        rState.materialMappings[index].textureOffsetX = 0;
+                        rState.materialMappings[index].textureOffsetY = 0;
+                        rState.materialMappings[index].textureGlossiness = 0.5;
+                        renderMaterials();
+                        validateAndUpdateReimagerBtns();
+                    });
+                }
+
+                row.addEventListener('mouseenter', () => activateReimagerHighlight(mapping.hex));
+                row.addEventListener('mouseleave', deactivateReimagerHighlight);
+
+                rEls.materialsContainer.appendChild(row);
+            });
+            lucide.createIcons();
+        };
+
+        // Magic Highlighting
+        const activateReimagerHighlight = (hex) => {
+            rState.hoveredColorHex = hex;
+            
+            document.querySelectorAll('#reimager-modal .material-row').forEach(r => r.classList.remove('highlighted'));
+            const row = document.getElementById(`re-material-row-${hex.substring(1)}`);
+            if (row) row.classList.add('highlighted');
+
+            const mapping = rState.materialMappings.find(m => m.hex === hex);
+            if (mapping && mapping.canvas) {
+                rEls.highlightOverlay.width = mapping.canvas.width;
+                rEls.highlightOverlay.height = mapping.canvas.height;
+                rEls.highlightCtx.clearRect(0, 0, rEls.highlightOverlay.width, rEls.highlightOverlay.height);
+                
+                if (mapping.textureImg) {
+                    rEls.highlightCtx.globalCompositeOperation = 'source-over';
+                    rEls.highlightCtx.drawImage(rEls.sourcePreview, 0, 0, rEls.highlightOverlay.width, rEls.highlightOverlay.height);
+                    
+                    rEls.highlightCtx.globalCompositeOperation = 'multiply';
+                    const pattern = rEls.highlightCtx.createPattern(mapping.textureImg, 'repeat');
+                    const scale = mapping.scaleEnabled ? (mapping.textureScale || 1.0) : 1.0;
+                    const offsetX = mapping.textureOffsetX || 0;
+                    const offsetY = mapping.textureOffsetY || 0;
+                    
+                    const matrix = new DOMMatrix().translate(offsetX, offsetY).scale(scale);
+                    pattern.setTransform(matrix);
+                    rEls.highlightCtx.fillStyle = pattern;
+                    rEls.highlightCtx.fillRect(0, 0, rEls.highlightOverlay.width, rEls.highlightOverlay.height);
+                    
+                    rEls.highlightCtx.globalCompositeOperation = 'destination-in';
+                    rEls.highlightCtx.drawImage(mapping.canvas, 0, 0);
+
+                    rEls.highlightCtx.globalCompositeOperation = 'destination-over';
+                    rEls.highlightCtx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                    rEls.highlightCtx.fillRect(0, 0, rEls.highlightOverlay.width, rEls.highlightOverlay.height);
+                    rEls.highlightCtx.globalCompositeOperation = 'source-over'; 
+                } else {
+                    rEls.highlightCtx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                    rEls.highlightCtx.fillRect(0, 0, rEls.highlightOverlay.width, rEls.highlightOverlay.height);
+                    
+                    rEls.highlightCtx.globalCompositeOperation = 'destination-out';
+                    rEls.highlightCtx.drawImage(mapping.canvas, 0, 0);
+                    rEls.highlightCtx.globalCompositeOperation = 'source-over';
+                }
+                rEls.highlightOverlay.classList.remove('opacity-0');
+            }
+        };
+
+        const deactivateReimagerHighlight = () => {
+            if (textureDragState.active || editMaskState.active) return;
+            rState.hoveredColorHex = null;
+            document.querySelectorAll('#reimager-modal .material-row').forEach(r => r.classList.remove('highlighted'));
+            rEls.highlightOverlay.classList.add('opacity-0');
+        };
+
+        rEls.dropZone.addEventListener('mousedown', (e) => {
+            if (rState.hoveredColorHex) {
+                const mapping = rState.materialMappings.find(m => m.hex === rState.hoveredColorHex);
+                if (mapping && mapping.texture) {
+                    textureDragState.active = true;
+                    textureDragState.hex = rState.hoveredColorHex;
+                    textureDragState.startX = e.clientX;
+                    textureDragState.startY = e.clientY;
+                    textureDragState.initX = mapping.textureOffsetX || 0;
+                    textureDragState.initY = mapping.textureOffsetY || 0;
+                    textureDragState.moved = false;
+                    
+                    rEls.dropZone.style.cursor = 'grabbing';
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+            }
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (textureDragState.active) {
+                const dx = e.clientX - textureDragState.startX;
+                const dy = e.clientY - textureDragState.startY;
+                if (Math.abs(dx) > 3 || Math.abs(dy) > 3) textureDragState.moved = true;
+
+                const mapping = rState.materialMappings.find(m => m.hex === textureDragState.hex);
+                if (mapping) {
+                    const rect = rEls.sourcePreview.getBoundingClientRect();
+                    const imgRatio = rEls.sourcePreview.naturalWidth / rEls.sourcePreview.naturalHeight;
+                    const boxRatio = rect.width / rect.height;
+                    let displayScale = 1;
+                    
+                    if (imgRatio > boxRatio) {
+                        displayScale = rEls.sourcePreview.naturalWidth / rect.width;
+                    } else {
+                        displayScale = rEls.sourcePreview.naturalHeight / rect.height;
+                    }
+
+                    mapping.textureOffsetX = textureDragState.initX + (dx * displayScale);
+                    mapping.textureOffsetY = textureDragState.initY + (dy * displayScale);
+                    activateReimagerHighlight(textureDragState.hex);
+                }
+            }
+        });
+
+        rEls.dropZone.addEventListener('mousemove', (e) => {
+            if (textureDragState.active || editMaskState.active) return;
+            if (!rState.maskImage || rState.materialMappings.length === 0) return;
+            
+            const rect = rEls.sourcePreview.getBoundingClientRect();
+            const imgRatio = rEls.sourcePreview.naturalWidth / rEls.sourcePreview.naturalHeight;
+            const boxRatio = rect.width / rect.height;
+            let drawW, drawH, offX = 0, offY = 0;
+            
+            if (imgRatio > boxRatio) {
+                drawW = rect.width;
+                drawH = rect.width / imgRatio;
+                offY = (rect.height - drawH) / 2;
+            } else {
+                drawH = rect.height;
+                drawW = rect.height * imgRatio;
+                offX = (rect.width - drawW) / 2;
+            }
+
+            const mX = e.clientX - rect.left - offX;
+            const mY = e.clientY - rect.top - offY;
+
+            if (mX >= 0 && mX <= drawW && mY >= 0 && mY <= drawH) {
+                const natX = Math.floor((mX / drawW) * rEls.hiddenMaskCanvas.width);
+                const natY = Math.floor((mY / drawH) * rEls.hiddenMaskCanvas.height);
+                
+                if (natX >= 0 && natX < rEls.hiddenMaskCanvas.width && natY >= 0 && natY < rEls.hiddenMaskCanvas.height) {
+                    const pixel = rEls.hiddenMaskCtx.getImageData(natX, natY, 1, 1).data;
+                    if (pixel[3] > 128) {
+                        let bestHex = null;
+                        let minDst = 9999;
+                        rState.materialMappings.forEach(m => {
+                            const rgb = hexToRgb(m.hex);
+                            const dst = colorDist(pixel[0], pixel[1], pixel[2], rgb.r, rgb.g, rgb.b);
+                            if (dst < minDst) { minDst = dst; bestHex = m.hex; }
+                        });
+                        
+                        if (bestHex && minDst < PIXEL_MATCH_TOLERANCE) {
+                            activateReimagerHighlight(bestHex);
+                            return;
+                        }
+                    }
+                }
+            }
+            deactivateReimagerHighlight();
+        });
+
+        window.addEventListener('mouseup', () => {
+            if (textureDragState.active) {
+                textureDragState.active = false;
+                rEls.dropZone.style.cursor = 'pointer';
+                setTimeout(() => { textureDragState.moved = false; }, 50);
+            }
+        });
+
+        rEls.dropZone.addEventListener('mouseleave', deactivateReimagerHighlight);
+
+        const processMaskImage = (base64) => {
+            const img = new Image();
+            img.onload = () => {
+                let w = img.width;
+                let h = img.height;
+                
+                if (rEls.sourcePreview.naturalWidth && rEls.sourcePreview.naturalHeight) {
+                    w = rEls.sourcePreview.naturalWidth;
+                    h = rEls.sourcePreview.naturalHeight;
+                }
+                
+                rEls.hiddenMaskCanvas.width = w;
+                rEls.hiddenMaskCanvas.height = h;
+                rEls.hiddenMaskCtx.drawImage(img, 0, 0, w, h);
+                
+                originalMaskCanvas = document.createElement('canvas');
+                originalMaskCanvas.width = w;
+                originalMaskCanvas.height = h;
+                originalMaskCanvas.getContext('2d').drawImage(img, 0, 0, w, h);
+                
+                const data = rEls.hiddenMaskCtx.getImageData(0,0,w,h).data;
+                const colorMap = new Map();
+                
+                for(let i=0; i<data.length; i+=4) {
+                    if (data[i+3] < 128) continue; 
+                    const clamp = x => Math.min(255, Math.max(0, x));
+                    const r = clamp(Math.round(data[i]/32)*32);
+                    const g = clamp(Math.round(data[i+1]/32)*32);
+                    const b = clamp(Math.round(data[i+2]/32)*32);
+                    
+                    if ((r<32&&g<32&&b<32) || (r>220&&g>220&&b>220)) continue; 
+
+                    const hex = rgbToHex(r, g, b);
+                    if(!colorMap.has(hex)) colorMap.set(hex, { count: 0, r:0, g:0, b:0 });
+                    
+                    const stats = colorMap.get(hex);
+                    stats.count++;
+                    stats.r += data[i]; stats.g += data[i+1]; stats.b += data[i+2];
+                }
+                
+                const threshold = (w * h) * 0.01;
+                const extractedColors = [];
+                
+                Array.from(colorMap.entries())
+                    .filter(([_, stats]) => stats.count > threshold)
+                    .sort((a,b) => b[1].count - a[1].count)
+                    .forEach(([_, stats]) => {
+                        const trueHex = rgbToHex(
+                            Math.round(stats.r/stats.count), 
+                            Math.round(stats.g/stats.count), 
+                            Math.round(stats.b/stats.count)
+                        );
+                        extractedColors.push(trueHex);
+                    });
+
+                const newMappings = [];
+                extractedColors.forEach(hex => {
+                    const layerCanvas = document.createElement('canvas');
+                    layerCanvas.width = w; layerCanvas.height = h;
+                    const lCtx = layerCanvas.getContext('2d');
+                    
+                    const imgData = lCtx.createImageData(w, h);
+                    const out = imgData.data;
+                    const targetRgb = hexToRgb(hex);
+                    
+                    for(let i=0; i<data.length; i+=4) {
+                        if (data[i+3] < 128) continue;
+                        const dst = colorDist(data[i], data[i+1], data[i+2], targetRgb.r, targetRgb.g, targetRgb.b);
+                        if (dst < PIXEL_MATCH_TOLERANCE) {
+                            out[i] = 255; out[i+1] = 255; out[i+2] = 255; out[i+3] = 255; 
+                        }
+                    }
+                    lCtx.putImageData(imgData, 0, 0);
+                    
+                    newMappings.push({
+                        hex: hex,
+                        regionName: '',
+                        texture: null,
+                        textureImg: null,
+                        canvas: layerCanvas,
+                        textureScale: 1.0,
+                        textureOffsetX: 0,
+                        textureOffsetY: 0,
+                        textureGlossiness: 0.5,
+                        textureBump: 0.5,
+                        scaleEnabled: false,
+                        glossEnabled: false,
+                        bumpEnabled: false
+                    });
+                });
+
+                rState.materialMappings = newMappings;
+                renderMaterials();
+                validateAndUpdateReimagerBtns();
+            };
+            img.src = base64;
+        };
+
+        const setReimagerSourceImage = async (base64) => {
+            rState.sourceImage = base64;
+            rEls.sourcePreview.src = base64;
+            rEls.sourcePreview.classList.remove('hidden');
+            rEls.emptySource.classList.add('hidden');
+            showReimagerError(null);
+            
+            autoExtractJSON(base64);
+        };
+
+        const autoExtractJSON = async (base64) => {
+            rState.isExtracting = true;
+            rEls.jsonLoaderOverlay.classList.remove('hidden');
+            rEls.jsonLoaderOverlay.classList.add('flex');
+            
+            try {
+                const b64 = base64.split(',')[1];
+                const mime = base64.match(/[^:]\w+\/[\w-+\d.]+(?=;|,)/)[0] || "image/jpeg";
+                const response = await fetch(
+                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`,
+                    {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{ parts: [
+                                { text: "Analyze this interior/architectural image and extract descriptions for general properties." },
+                                { inlineData: { mimeType: mime, data: b64 } }
+                            ]}],
+                            generationConfig: {
+                                responseMimeType: "application/json",
+                                responseSchema: {
+                                    type: "OBJECT",
+                                    properties: {
+                                        style: { type: "STRING" }, viewAngle: { type: "STRING" }, ceiling: { type: "STRING" },
+                                        floor: { type: "STRING" }, walls: { type: "STRING" }, furniture: { type: "STRING" },
+                                        interiorLighting: { type: "STRING" }, environment: { type: "STRING" }, viewBackground: { type: "STRING" },
+                                        other: { type: "STRING" }
+                                    }
+                                }
+                            }
+                        })
+                    }
+                );
+                if (!response.ok) throw new Error("Failed extraction");
+                const data = await response.json();
+                const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (text) {
+                    rState.promptElements = { ...rState.promptElements, ...JSON.parse(text) };
+                    rEls.jsonEditor.value = JSON.stringify(rState.promptElements, null, 2);
+                    validateAndUpdateReimagerBtns();
+                }
+            } catch (err) { 
+                showReimagerError("Extraction failed. You can edit the JSON manually."); 
+            } finally {
+                rState.isExtracting = false;
+                rEls.jsonLoaderOverlay.classList.add('hidden');
+                rEls.jsonLoaderOverlay.classList.remove('flex');
+            }
+        };
+
+        const setMaskImage = (base64) => {
+            rState.maskImage = base64;
+            rEls.maskPreview.src = base64;
+            rEls.maskPreview.classList.remove('hidden');
+            rEls.emptyMask.classList.add('hidden');
+            showReimagerError(null);
+            processMaskImage(base64);
+        };
+
+        rEls.dropZone.addEventListener('click', (e) => {
+            if (textureDragState.moved || editMaskState.active) return; 
+
+            if (rState.hoveredColorHex) {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                const row = document.getElementById(`re-material-row-${rState.hoveredColorHex.substring(1)}`);
+                if (row) {
+                    row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    const input = row.querySelector('.region-input');
+                    if (input) setTimeout(() => input.focus(), 100);
+                }
+            } else {
+                rEls.fileInput.click();
+            }
+        });
+        
+        rEls.fileInput.addEventListener('change', async (e) => {
+            if (e.target.files[0]) {
+                try { await setReimagerSourceImage(await fileToBase64(e.target.files[0])); } catch(err) { showReimagerError("Failed to read image."); }
+            }
+        });
+        
+        rEls.maskDropZone.addEventListener('click', () => rEls.maskFileInput.click());
+        rEls.maskFileInput.addEventListener('change', async (e) => {
+            if (e.target.files[0]) {
+                try { setMaskImage(await fileToBase64(e.target.files[0])); } catch(err) { showReimagerError("Failed to read mask."); }
+            }
+        });
+
+        // Re-imager Dropzone Drag & Drop
+        rEls.dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault(); e.stopPropagation();
+            rEls.dropZone.classList.add('border-blue-500', 'bg-neutral-800/80', 'shadow-[0_0_15px_rgba(59,130,246,0.5)]');
+        });
+        rEls.dropZone.addEventListener('dragleave', (e) => {
+            e.preventDefault(); e.stopPropagation();
+            rEls.dropZone.classList.remove('border-blue-500', 'bg-neutral-800/80', 'shadow-[0_0_15px_rgba(59,130,246,0.5)]');
+        });
+        rEls.dropZone.addEventListener('drop', async (e) => {
+            e.preventDefault(); e.stopPropagation();
+            rEls.dropZone.classList.remove('border-blue-500', 'bg-neutral-800/80', 'shadow-[0_0_15px_rgba(59,130,246,0.5)]');
+            if (e.dataTransfer.files[0]) {
+                try { await setReimagerSourceImage(await fileToBase64(e.dataTransfer.files[0])); } catch(err) { showReimagerError("Failed dropped image."); }
+            }
+        });
+
+        // Re-imager Mask Dropzone Drag & Drop
+        rEls.maskDropZone.addEventListener('dragover', (e) => {
+            e.preventDefault(); e.stopPropagation();
+            rEls.maskDropZone.classList.add('border-blue-500', 'bg-neutral-800/80', 'shadow-[0_0_15px_rgba(59,130,246,0.5)]');
+        });
+        rEls.maskDropZone.addEventListener('dragleave', (e) => {
+            e.preventDefault(); e.stopPropagation();
+            rEls.maskDropZone.classList.remove('border-blue-500', 'bg-neutral-800/80', 'shadow-[0_0_15px_rgba(59,130,246,0.5)]');
+        });
+        rEls.maskDropZone.addEventListener('drop', async (e) => {
+            e.preventDefault(); e.stopPropagation();
+            rEls.maskDropZone.classList.remove('border-blue-500', 'bg-neutral-800/80', 'shadow-[0_0_15px_rgba(59,130,246,0.5)]');
+            if (e.dataTransfer.files[0]) {
+                try { setMaskImage(await fileToBase64(e.dataTransfer.files[0])); } catch(err) { showReimagerError("Failed dropped mask."); }
+            }
+        });
+
+        const compositeMaskedImage = async (sourceB64, maskB64, genB64, mappings) => {
+            return new Promise((resolve) => {
+                const srcImg = new Image();
+                srcImg.onload = () => {
+                    const w = srcImg.width;
+                    const h = srcImg.height;
+
+                    const genImg = new Image();
+                    genImg.onload = () => {
+                        const maskImg = new Image();
+                        maskImg.onload = () => {
+                            const canvas = document.createElement('canvas');
+                            canvas.width = w; canvas.height = h;
+                            const ctx = canvas.getContext('2d');
+                            
+                            ctx.drawImage(srcImg, 0, 0, w, h);
+                            const finalData = ctx.getImageData(0, 0, w, h);
+                            
+                            const genCanvas = document.createElement('canvas');
+                            genCanvas.width = w; genCanvas.height = h;
+                            const genCtx = genCanvas.getContext('2d');
+                            genCtx.drawImage(genImg, 0, 0, w, h);
+                            const genData = genCtx.getImageData(0, 0, w, h).data;
+                            
+                            const maskCanvas = document.createElement('canvas');
+                            maskCanvas.width = w; maskCanvas.height = h;
+                            const maskCtx = maskCanvas.getContext('2d');
+                            maskCtx.drawImage(maskImg, 0, 0, w, h);
+                            const maskData = maskCtx.getImageData(0, 0, w, h).data;
+                            
+                            for (let i = 0; i < maskData.length; i += 4) {
+                                if (maskData[i+3] > 64) {
+                                    const r = maskData[i], g = maskData[i+1], b = maskData[i+2];
+                                    let isMapped = false;
+                                    
+                                    for (let m of mappings) {
+                                        if (!m.texture && !m.regionName) continue;
+                                        const rgb = hexToRgb(m.hex);
+                                        if (colorDist(r, g, b, rgb.r, rgb.g, rgb.b) < PIXEL_MATCH_TOLERANCE) { 
+                                            isMapped = true; 
+                                            break;
+                                        }
+                                    }
+                                    
+                                    if (isMapped) {
+                                        finalData.data[i] = genData[i];
+                                        finalData.data[i+1] = genData[i+1];
+                                        finalData.data[i+2] = genData[i+2];
+                                        finalData.data[i+3] = 255;
+                                    }
+                                }
+                            }
+                            
+                            ctx.putImageData(finalData, 0, 0);
+                            resolve(canvas.toDataURL('image/png', 1.0));
+                        };
+                        maskImg.src = maskB64;
+                    };
+                    genImg.src = genB64;
+                };
+                srcImg.src = sourceB64;
+            });
+        };
+
+        const handleReimagerGeneration = async (mode) => {
+            rState.isGenerating = true; 
+            rEls.generateJsonBtn.disabled = true;
+            rEls.generateMaskBtn.disabled = true;
+            
+            rEls.generationLoaderText.textContent = mode === 'json' ? "Applying JSON Prompt..." : "Mapping Materials...";
+            rEls.generationLoaderOverlay.classList.remove('hidden');
+            rEls.generationLoaderOverlay.classList.add('flex');
+            showReimagerError(null);
+            
+            rEls.generatedPreview.classList.add('hidden');
+            rEls.compareTooltip.classList.add('hidden');
+            rEls.emptyGenerated.classList.remove('hidden');
+            rEls.imageActions.classList.add('hidden');
+
+            try {
+                let requestParts = [];
+                let base64Img = null;
+
+                if (!rState.sourceImage) throw new Error("Source image is required to generate a re-rendered image.");
+                
+                const sB64 = rState.sourceImage.split(',')[1];
+                const sMime = rState.sourceImage.match(/[^:]\w+\/[\w-+\d.]+(?=;|,)/)[0] || "image/jpeg";
+
+                if (mode === 'json') {
+                    const gParts = [];
+                    Object.entries(rState.promptElements).forEach(([k,v]) => { if(v) gParts.push(`${k}: ${v}`); });
+                    const generalPrompt = gParts.join(". ");
+
+                    requestParts.push({ text: "Task: Re-render the provided architectural/interior scene maintaining the structural layout." });
+                    requestParts.push({ text: "Original Image:" });
+                    requestParts.push({ inlineData: { mimeType: sMime, data: sB64 } });
+                    
+                    if (generalPrompt) {
+                        requestParts.push({ text: `Scene Adjustments to Apply: ${generalPrompt}` });
+                    }
+                } 
+                else if (mode === 'mask') {
+                    requestParts.push({ text: "Task: You are an expert architectural material editor. You must replace the materials on specific objects while perfectly harmonizing the new textures with the scene's original 3D geometry, lighting, shadows, and perspective." });
+                    requestParts.push({ text: "Image 1 (Base Image):" });
+                    requestParts.push({ inlineData: { mimeType: sMime, data: sB64 } });
+                    
+                    const mB64 = rState.maskImage.split(',')[1];
+                    const mMime = rState.maskImage.match(/[^:]\w+\/[\w-+\d.]+(?=;|,)/)[0] || "image/jpeg";
+                    
+                    requestParts.push({ text: "Image 2 (Color Mask). Use this strictly to locate the objects to edit." });
+                    requestParts.push({ inlineData: { mimeType: mMime, data: mB64 } });
+                    
+                    rState.materialMappings.forEach((mapping, index) => {
+                        if (!mapping.texture && !mapping.regionName) return;
+                        
+                        requestParts.push({ text: `\n--- MATERIAL MAPPING ${index + 1} ---` });
+                        let instruction = `PRIORITY TARGET AREA: The exact boundaries colored ${mapping.hex} in the Color Mask image.`;
+                        
+                        if (mapping.regionName) {
+                            instruction += `\nSECONDARY GEOMETRY HINT: Combine this target area with the object name '${mapping.regionName}' to accurately understand the 3D shape and lighting, but the mask boundaries remain the absolute priority.`;
+                        } else {
+                            instruction += `\nTARGET COVERAGE: You must unconditionally fill ALL highlighted areas matching mask color ${mapping.hex} with the designated material.`;
+                        }
+                        
+                        if (mapping.texture) {
+                            instruction += `\nACTION: Use the following image as a seamless material texture pattern. Generatively fill the priority target area with this pattern. Ensure the texture wraps naturally around the object's 3D geometry.`;
+                            instruction += `\nAI MATERIAL GENERATION: Intelligently analyze the Region Name and overall scene JSON prompt to automatically generate and apply realistic bump maps and reflections suitable for this type of material to make it blend perfectly with the room's lighting.`;
+
+                            if (mapping.glossEnabled) {
+                                const gloss = mapping.textureGlossiness !== undefined ? mapping.textureGlossiness : 0.5;
+                                let glossDesc = gloss < 0.3 ? "matte, non-reflective finish" : (gloss < 0.7 ? "satin, slightly reflective finish" : "highly glossy, reflective, polished finish");
+                                instruction += `\nMANUAL OVERRIDE (GLOSS): Override automatic reflections. Force the material surface to have a ${glossDesc} (Glossiness value: ${gloss}).`;
+                            }
+                            
+                            if (mapping.bumpEnabled) {
+                                const bump = mapping.textureBump !== undefined ? mapping.textureBump : 0.5;
+                                let bumpDesc = bump < 0.3 ? "smooth, flat surface with minimal depth" : (bump < 0.7 ? "moderate surface texture and relief" : "deep, pronounced bump map and rough surface geometry");
+                                instruction += `\nMANUAL OVERRIDE (BUMP): Override automatic bump depth. Force the material surface to have a ${bumpDesc} (Bump intensity: ${bump}).`;
+                            }
+
+                            requestParts.push({ text: instruction });
+                            
+                            const scaledTxB64 = getProcessedTexture(mapping);
+                            const txB64 = scaledTxB64.split(',')[1];
+                            const txMime = scaledTxB64.match(/[^:]\w+\/[\w-+\d.]+(?=;|,)/)[0] || "image/jpeg";
+                            requestParts.push({ inlineData: { mimeType: txMime, data: txB64 } });
+                        }
+                    });
+                }
+
+                const response = await fetch(
+                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${apiKey}`,
+                    {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{ parts: requestParts }],
+                            generationConfig: { responseModalities: ['IMAGE'] }
+                        })
+                    }
+                );
+                
+                if (!response.ok) throw new Error("Image editing request failed.");
+                const data = await response.json();
+                base64Img = data.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData?.data;
+
+                if (base64Img) {
+                    let finalImgStr = `data:image/png;base64,${base64Img}`;
+                    
+                    if (mode === 'mask') {
+                        rEls.generationLoaderText.textContent = "Finalizing borders...";
+                        finalImgStr = await compositeMaskedImage(rState.sourceImage, rState.maskImage, finalImgStr, rState.materialMappings);
+                    }
+                    
+                    rState.generatedImage = finalImgStr;
+                    rEls.generatedPreview.src = finalImgStr;
+                    rEls.generatedPreview.classList.remove('hidden');
+                    rEls.compareTooltip.classList.remove('hidden');
+                    rEls.emptyGenerated.classList.add('hidden');
+                    
+                    fetch(finalImgStr).then(r => r.blob()).then(blob => {
+                        const url = URL.createObjectURL(blob);
+                        rEls.downloadBtn.href = url;
+                        rEls.openTabBtn.href = url;
+                        rEls.imageActions.classList.remove('hidden');
+                    });
+                } else { throw new Error("No image data returned."); }
+            } catch (err) { showReimagerError(err.message || "Generation failed."); } 
+            finally {
+                rState.isGenerating = false; 
+                validateAndUpdateReimagerBtns(); 
+                rEls.generationLoaderOverlay.classList.add('hidden'); 
+            }
+        };
+
+        rEls.generateJsonBtn.addEventListener('click', () => handleReimagerGeneration('json'));
+        rEls.generateMaskBtn.addEventListener('click', () => handleReimagerGeneration('mask'));
+
+        rEls.jsonEditor.value = JSON.stringify(rState.promptElements, null, 2);
+        validateAndUpdateReimagerBtns();
+    </script>
+</body>
+</html>
